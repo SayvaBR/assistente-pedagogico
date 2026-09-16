@@ -1,6 +1,7 @@
 package com.sayvabr.assistentepedagogico.ui
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,8 +54,63 @@ fun TeacherApp(store: TeacherStore) {
     var selectedClass by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
+    var backStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    var confirmExit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+
+    val rootDestinations = setOf("home", "planning", "classes", "files", "more")
+    fun synchronizeTab(destination: String) {
+        tab = when (destination) {
+            "home" -> "Início"
+            "planning" -> "Planejamento"
+            "classes" -> "Turmas"
+            "files" -> "Arquivos"
+            "more" -> "Mais"
+            else -> tab
+        }
+    }
+    fun navigate(destination: String, root: Boolean = false) {
+        if (destination == screen && !root) return
+        backStack = if (root || destination in rootDestinations) arrayListOf()
+            else ArrayList(backStack + screen)
+        screen = destination
+        synchronizeTab(destination)
+    }
+    fun back() {
+        when {
+            confirmExit -> confirmExit = false
+            error != null -> error = null
+            busy -> Unit
+            backStack.isNotEmpty() -> {
+                screen = backStack.last()
+                backStack = ArrayList(backStack.dropLast(1))
+                synchronizeTab(screen)
+            }
+            screen != "home" -> navigate("home", root = true)
+            else -> confirmExit = true
+        }
+    }
+    fun afterSave(destination: String) {
+        when {
+            destination == "createClass" -> {
+                backStack = arrayListOf("home")
+                screen = destination
+            }
+            destination in rootDestinations -> navigate(destination, root = true)
+            backStack.lastOrNull() == destination -> {
+                screen = destination
+                backStack = ArrayList(backStack.dropLast(1))
+                synchronizeTab(destination)
+            }
+            destination == "classDetail" -> {
+                backStack = arrayListOf("classes")
+                screen = destination
+                synchronizeTab("classes")
+            }
+            else -> navigate(destination)
+        }
+    }
 
     LaunchedEffect(store) {
         try { data = withContext(Dispatchers.IO) { store.read() } }
@@ -69,7 +125,7 @@ fun TeacherApp(store: TeacherStore) {
             try {
                 val fresh = withContext(Dispatchers.IO) { operation(); store.read() }
                 data = fresh
-                if (next != null) screen = next
+                if (next != null) afterSave(next)
             } catch (e: Exception) { error = e.message ?: "Não foi possível salvar. Tente novamente." }
             finally { busy = false }
         }
@@ -88,6 +144,7 @@ fun TeacherApp(store: TeacherStore) {
     }
 
     val snapshot = data
+    BackHandler(enabled = snapshot?.profile != null && !busy) { back() }
     if (snapshot == null) {
         Box(Modifier.fillMaxSize().background(canvas), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -107,58 +164,65 @@ fun TeacherApp(store: TeacherStore) {
         error?.let { ErrorOverlay(it) { error = null } }
         return
     }
-    if (snapshot.classrooms.isEmpty() && screen != "createClass") screen = "createClass"
+    // An empty account may return to Home, Turmas, Arquivos or Mais without a forced form.
 
     Column(Modifier.fillMaxSize().background(canvas)) {
         Box(Modifier.weight(1f)) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(18.dp))
                 when (screen) {
-                    "home" -> HomeScreen(snapshot, currentClass, { screen = it }, { selectedClass = it })
+                    "home" -> HomeScreen(snapshot, currentClass, { navigate(it) }, { selectedClass = it })
                     "classes" -> ClassesScreen(snapshot, currentClass,
-              onPick = { selectedClass = it; screen = "classDetail" },
-              onAdd = { screen = "createClass" },
+              onPick = { selectedClass = it; navigate("classDetail") },
+              onAdd = { navigate("createClass") },
               onRestore = { id -> commit("classes") { store.setClassArchived(id, false) } })
-                    "createClass" -> ClassForm(onBack = { screen = if (snapshot.classrooms.isEmpty()) "createClass" else "classes" }, onSave = { name, stage, shift -> commit("classes") { store.createClass(name, stage, shift) } })
+                    "createClass" -> ClassForm(onBack = { back() }, onSave = { name, stage, shift -> commit("classes") { store.createClass(name, stage, shift) } })
                     "editClass" -> if (currentClass != null) ClassForm(
-              onBack = { screen = "classDetail" },
+              onBack = { back() },
               onSave = { name, stage, shift -> commit("classDetail") { store.updateClass(currentClass.id, name, stage, shift) } },
               initial = currentClass)
           "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
-              back = { screen = "classDetail" },
+              back = { back() },
               archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
-          "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { screen = it },
-              onStudent = { selectedStudent = it; screen = "editStudent" })
+          "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { navigate(it) },
+              onStudent = { selectedStudent = it; navigate("editStudent") })
           "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
               it.id == selectedStudent && it.classroomId == currentClass.id
           }?.let { student -> StudentEditForm(student, currentClass,
-              back = { screen = "classDetail" },
+              back = { back() },
               save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
               delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } }) }
-                    "addStudent" -> if (currentClass != null) StudentForm(currentClass, { screen = "classDetail" }, { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } })
-                    "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { screen = "classDetail" }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
-                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { screen = "classDetail" }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
-                    "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { screen = it })
-                    "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { screen = "planning" }, { title, subject, day, time, objective, content, method -> commit("planning") { store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method) } })
-                    "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { screen = "newAppointment" })
-                    "newAppointment" -> AppointmentForm(selectedDay, { screen = "agenda" }, { title, day, time -> commit("agenda") { store.addAppointment(title, day, time) } })
+                    "addStudent" -> if (currentClass != null) StudentForm(currentClass, { back() }, { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } })
+                    "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
+                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
+                    "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) })
+                    "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { back() }, { title, subject, day, time, objective, content, method -> commit("planning") { store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method) } })
+                    "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { navigate("newAppointment") })
+                    "newAppointment" -> AppointmentForm(selectedDay, { back() }, { title, day, time -> commit("agenda") { store.addAppointment(title, day, time) } })
                     "files" -> FilesScreen(snapshot, { filePicker.launch(arrayOf("*/*")) }, { file ->
                         try { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(file.uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
                         catch (e: Exception) { error = "Não foi possível abrir este arquivo." }
                     })
-                    "more" -> MoreScreen(snapshot, { screen = it })
-                    "profile" -> ProfileForm(snapshot.profile.name, { screen = "more" }, { name -> commit("more") { store.saveProfile(name) } })
+                    "more" -> MoreScreen(snapshot, { navigate(it) })
+                    "profile" -> ProfileForm(snapshot.profile.name, { back() }, { name -> commit("more") { store.saveProfile(name) } })
                     else -> HomeScreen(snapshot, currentClass, { screen = it }, { selectedClass = it })
                 }
                 Spacer(Modifier.height(24.dp))
             }
         }
-        if (snapshot.classrooms.isNotEmpty() && screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "profile")) {
-            BottomBar(tab) { destination -> tab = destination; screen = when (destination) { "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more" } }
+        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "profile")) {
+            BottomBar(tab) { destination -> navigate(when (destination) { "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more" }, root = true) }
         }
     }
     if (busy) SavingOverlay()
     error?.let { ErrorOverlay(it) { error = null } }
+    if (confirmExit) AlertDialog(
+        onDismissRequest = { confirmExit = false },
+        title = { Text("Sair do Assistente Pedagógico?") },
+        text = { Text("Seus registros já salvos permanecem neste aparelho. Para sair, confirme abaixo.") },
+        confirmButton = { TextButton(onClick = { confirmExit = false; (context as? android.app.Activity)?.finish() }) { Text("Sair") } },
+        dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Continuar no app") } }
+    )
 }
 
 @Composable private fun SavingOverlay() {
@@ -262,6 +326,20 @@ fun TeacherApp(store: TeacherStore) {
 
 @Composable private fun FirstRun(onFinish: (String) -> Unit) {
     var step by rememberSaveable { mutableIntStateOf(0) }
+    var confirmOnboardingExit by remember { mutableStateOf(false) }
+    val onboardingContext = LocalContext.current
+    BackHandler {
+        if (confirmOnboardingExit) confirmOnboardingExit = false
+        else if (step > 0) step--
+        else confirmOnboardingExit = true
+    }
+    if (confirmOnboardingExit) AlertDialog(
+        onDismissRequest = { confirmOnboardingExit = false },
+        title = { Text("Sair da configuração inicial?") },
+        text = { Text("Você poderá continuar a apresentação quando abrir o aplicativo novamente.") },
+        confirmButton = { TextButton(onClick = { confirmOnboardingExit = false; (onboardingContext as? android.app.Activity)?.finish() }) { Text("Sair") } },
+        dismissButton = { TextButton(onClick = { confirmOnboardingExit = false }) { Text("Continuar") } }
+    )
     var name by rememberSaveable { mutableStateOf("") }
     val messages = listOf(
         Triple("Tudo o que você precisa em um só lugar", "Planeje aulas, registre sua turma e acompanhe sua rotina.", "📚"),
@@ -543,7 +621,8 @@ fun TeacherApp(store: TeacherStore) {
         Spacer(Modifier.height(9.dp))
     }
     Spacer(Modifier.height(12.dp))
-    PrimaryButton("+ Adicionar aula") { go("newLesson") }
+    if (classroom == null) Panel { Text("Crie ou restaure uma turma antes de cadastrar aulas.", color = ink) }
+    else PrimaryButton("+ Adicionar aula") { go("newLesson") }
 }
 
 @Composable private fun LessonForm(classroom: Classroom, initialDay: String, back: () -> Unit, save: (String, String, String, String, String, String, String) -> Unit) {
