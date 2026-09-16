@@ -137,6 +137,21 @@ class TeacherStoreInstrumentedTest {
         assertTrue(reopen().read().attendance.all { it.status == "P" })
     }
 
+    @Test fun fileCatalogRenameAndRemovalPersistWithoutTouchingOriginalUri() {
+        val first = db()
+        first.addFile("original.pdf", "content://example/document/777")
+        val file = first.read().files.single()
+        first.renameFile(file.id, "Plano de aula.pdf")
+        val renamed = reopen().read().files.single()
+        assertEquals("Plano de aula.pdf", renamed.name)
+        assertEquals("content://example/document/777", renamed.uri)
+        rejects { db().renameFile(file.id, "   ") }
+        assertEquals("Plano de aula.pdf", reopen().read().files.single().name)
+        db().removeFile(file.id)
+        assertTrue(reopen().read().files.isEmpty())
+        rejects { db().removeFile(file.id) }
+    }
+
     @Test fun migrationV1ToV2PreservesEveryExistingTable() {
         val file = context.getDatabasePath("pedagogico.db")
         file.parentFile?.mkdirs()

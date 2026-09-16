@@ -144,7 +144,7 @@ fun TeacherApp(store: TeacherStore) {
     }
 
     val snapshot = data
-    BackHandler(enabled = snapshot?.profile != null && !busy) { back() }
+    BackHandler(enabled = snapshot?.profile != null) { back() }
     if (snapshot == null) {
         Box(Modifier.fillMaxSize().background(canvas), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -199,10 +199,19 @@ fun TeacherApp(store: TeacherStore) {
                     "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { back() }, { title, subject, day, time, objective, content, method -> commit("planning") { store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method) } })
                     "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { navigate("newAppointment") })
                     "newAppointment" -> AppointmentForm(selectedDay, { back() }, { title, day, time -> commit("agenda") { store.addAppointment(title, day, time) } })
-                    "files" -> FilesScreen(snapshot, { filePicker.launch(arrayOf("*/*")) }, { file ->
-                        try { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(file.uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
-                        catch (e: Exception) { error = "Não foi possível abrir este arquivo." }
-                    })
+                    "files" -> FileCatalogScreen(
+              files = snapshot.files,
+              importFile = { filePicker.launch(arrayOf("*/*")) },
+              openFile = { file ->
+                  try { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(file.uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                  catch (e: Exception) { error = "Não foi possível abrir este arquivo. Verifique se ele ainda existe e se há um aplicativo compatível." }
+              },
+              renameFile = { file, newName -> commit("files") { store.renameFile(file.id, newName) } },
+              removeFile = { file -> commit("files") {
+                  store.removeFile(file.id)
+                  runCatching { context.contentResolver.releasePersistableUriPermission(android.net.Uri.parse(file.uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+              } }
+          )
                     "more" -> MoreScreen(snapshot, { navigate(it) })
                     "profile" -> ProfileForm(snapshot.profile.name, { back() }, { name -> commit("more") { store.saveProfile(name) } })
                     else -> HomeScreen(snapshot, currentClass, { screen = it }, { selectedClass = it })
@@ -668,17 +677,6 @@ fun TeacherApp(store: TeacherStore) {
         Input("Horário (HH:MM)", time, { time = it })
         PrimaryButton("Salvar compromisso") { save(title, day, time) }
     }
-}
-
-@Composable private fun FilesScreen(data: TeacherSnapshot, import: () -> Unit, open: (SavedFile) -> Unit) {
-    Heading("Arquivos", "Seus materiais organizados em um só lugar")
-    PrimaryButton("+ Importar arquivo", click = import)
-    Spacer(Modifier.height(23.dp))
-    Subtitle("Arquivos recentes")
-    if (data.files.isEmpty()) Panel { Text("Nenhum arquivo por aqui ainda. Importe um documento do seu aparelho para começar.", color = ink) }
-    data.files.forEach { file -> ActionTile("📄", file.name, "Abrir documento") { open(file) } }
-    Spacer(Modifier.height(12.dp))
-    Text("O app guarda uma permissão local de acesso ao arquivo original. Nenhum documento é enviado à nuvem.", fontSize = 12.sp, color = ink.copy(alpha = .7f))
 }
 
 @Composable private fun MoreScreen(data: TeacherSnapshot, go: (String) -> Unit) {

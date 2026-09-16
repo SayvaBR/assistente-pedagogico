@@ -184,6 +184,19 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         writableDatabase.insertOrThrow("appointments", null, values("title" to title.trim(), "day" to day, "time" to time))
     }
 
+    /** Renames the app catalog entry only; the original SAF document is never modified. */
+    fun renameFile(fileId: Long, name: String) {
+        require(name.trim().isNotEmpty() && name.trim().length <= 180) { "Informe um nome de arquivo válido (até 180 caracteres)." }
+        val updated = writableDatabase.update("saved_files", values("name" to name.trim()), "id=?", arrayOf(fileId.toString()))
+        require(updated == 1) { "Arquivo não encontrado." }
+    }
+
+    /** Removes only this local reference; does not delete an original document. */
+    fun removeFile(fileId: Long) {
+        val deleted = writableDatabase.delete("saved_files", "id=?", arrayOf(fileId.toString()))
+        require(deleted == 1) { "Arquivo não encontrado." }
+    }
+
     fun addFile(name: String, uri: String) {
         require(name.isNotBlank() && uri.startsWith("content://")) { "Arquivo inválido." }
         writableDatabase.insertWithOnConflict("saved_files", null, values("name" to name, "uri" to uri), SQLiteDatabase.CONFLICT_IGNORE)
