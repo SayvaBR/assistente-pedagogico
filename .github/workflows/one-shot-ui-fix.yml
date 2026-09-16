@@ -1,0 +1,48 @@
+name: One-shot Kotlin correction
+on:
+  push:
+    branches: [feat/1-android-bootstrap]
+    paths: [.github/workflows/one-shot-ui-fix.yml]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/1-android-bootstrap
+          persist-credentials: true
+      - name: Apply exact Kotlin compiler corrections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt')
+          src = path.read_text(encoding='utf-8')
+          replacements = {
+            'private fun PrimaryButton(label: String, click: () -> Unit, secondary: Boolean = false)': 'private fun PrimaryButton(label: String, secondary: Boolean = false, click: () -> Unit)',
+            'PrimaryButton("Entendi", dismiss)': 'PrimaryButton("Entendi", click = dismiss)',
+            'PrimaryButton("Adicionar alunos", onBack)': 'PrimaryButton("Adicionar alunos", click = onBack)',
+            'PrimaryButton("+ Novo compromisso", add)': 'PrimaryButton("+ Novo compromisso", click = add)',
+            'PrimaryButton("+ Importar arquivo", import)': 'PrimaryButton("+ Importar arquivo", click = import)',
+            '@Composable private fun NavItem(label: String, symbol: String, selected: Boolean, click: () -> Unit) {': '@Composable private fun NavItem(label: String, symbol: String, selected: Boolean, modifier: Modifier, click: () -> Unit) {',
+            'Column(Modifier.weight(1f).clickable(onClick = click).padding(vertical = 7.dp)': 'Column(modifier.clickable(onClick = click).padding(vertical = 7.dp)',
+            'NavItem(label, icon, selected == label) { pick(label) }': 'NavItem(label, icon, selected == label, Modifier.weight(1f)) { pick(label) }',
+          }
+          for old, new in replacements.items():
+              count = src.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one occurrence of {old!r}, found {count}; no write performed')
+              src = src.replace(old, new, 1)
+          path.write_text(src, encoding='utf-8')
+          print('Applied eight targeted corrections to TeacherApp.kt')
+          PY
+      - name: Commit correction
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          git commit -m 'fix(ui): correct Compose RowScope and button callback order'
+          git push origin HEAD:feat/1-android-bootstrap
