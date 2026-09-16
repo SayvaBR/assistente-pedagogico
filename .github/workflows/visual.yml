@@ -1,11 +1,8 @@
 name: Android visual evidence
+# Capturas visuais automáticas por PR suspensas por decisão do titular.
+# A suíte permanece disponível sob demanda para gates relevantes de UX/release.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'app/**'
-      - 'tools/capture_android_screens.py'
-      - '.github/workflows/visual.yml'
 permissions:
   contents: read
 jobs:
