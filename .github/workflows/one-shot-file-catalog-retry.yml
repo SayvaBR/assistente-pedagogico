@@ -1,0 +1,50 @@
+name: One-shot file catalog patch retry
+on:
+  push:
+    branches: [feat/1-android-bootstrap]
+    paths:
+      - .github/workflows/one-shot-file-catalog-retry.yml
+permissions:
+  contents: write
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/1-android-bootstrap
+          persist-credentials: true
+      - name: Apply catalog implementation with robust structural anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          original = Path('.github/workflows/one-shot-file-catalog.yml').read_text().splitlines()
+          begin = next(i for i, line in enumerate(original) if "python3 - <<'PY'" in line)
+          end = next(i for i in range(begin+1, len(original)) if original[i].strip() == 'PY')
+          script = textwrap.dedent('\n'.join(original[begin+1:end]))
+          anchor = "app = replace_once(app, old_files, new_files, 'wire real file catalog into Files tab')"
+          replacement = '''files_start = '                    "files" -> FilesScreen('
+          files_end = '                    "more" -> MoreScreen('
+          assert app.count(files_start) == 1 and app.count(files_end) == 1
+          files_a = app.index(files_start)
+          files_b = app.index(files_end)
+          assert files_a < files_b and files_b-files_a < 1300
+          app = app[:files_a] + new_files + '\\n' + app[files_b:]
+          print('PATCH: wire real file catalog into Files tab')'''
+          # Preserve the newline escape in the extracted Python source.
+          replacement = replacement.replace("'\\\\n'", "'\\n'")
+          assert script.count(anchor) == 1, 'routing anchor unexpectedly changed'
+          script = script.replace(anchor, replacement)
+          compile(script, 'catalog_patch.py', 'exec')
+          exec(compile(script, 'catalog_patch.py', 'exec'))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt app/src/main/java/com/sayvabr/assistentepedagogico/ui/FileCatalogScreen.kt app/src/androidTest/java/com/sayvabr/assistentepedagogico/data/TeacherStoreInstrumentedTest.kt
+          git rm -f .github/workflows/one-shot-file-catalog.yml .github/workflows/one-shot-file-catalog-retry.yml
+          git commit -m 'feat(files): searchable catalog, safe rename and unlink; protect Back while saving'
+          git push origin HEAD:feat/1-android-bootstrap
