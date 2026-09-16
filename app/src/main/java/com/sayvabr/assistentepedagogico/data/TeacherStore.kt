@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.time.LocalDate
+import java.time.LocalTime
 
 /** All records stay in the app's private SQLite database. Android automatic backup is disabled. */
 data class TeacherProfile(val name: String)
@@ -180,8 +181,23 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     fun addAppointment(title: String, day: String, time: String) {
         require(title.isNotBlank()) { "Informe o compromisso." }
         LocalDate.parse(day)
-        require(Regex("\\d{2}:\\d{2}").matches(time)) { "Horário inválido: use HH:MM." }
+        LocalTime.parse(time)
         writableDatabase.insertOrThrow("appointments", null, values("title" to title.trim(), "day" to day, "time" to time))
+    }
+
+    /** Keeps the same record ID when changing a commitment, including its date. */
+    fun updateAppointment(appointmentId: Long, title: String, day: String, time: String) {
+        require(title.trim().isNotEmpty()) { "Informe o compromisso." }
+        LocalDate.parse(day)
+        LocalTime.parse(time)
+        val changed = writableDatabase.update("appointments", values("title" to title.trim(), "day" to day, "time" to time), "id=?", arrayOf(appointmentId.toString()))
+        require(changed == 1) { "Compromisso não encontrado." }
+    }
+
+    /** Deletes only the selected commitment; no other schedule records are affected. */
+    fun deleteAppointment(appointmentId: Long) {
+        val removed = writableDatabase.delete("appointments", "id=?", arrayOf(appointmentId.toString()))
+        require(removed == 1) { "Compromisso não encontrado." }
     }
 
     /** Renames the app catalog entry only; the original SAF document is never modified. */

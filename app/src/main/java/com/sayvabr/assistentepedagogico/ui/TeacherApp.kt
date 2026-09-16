@@ -54,6 +54,7 @@ fun TeacherApp(store: TeacherStore) {
     var selectedClass by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
+    var selectedAppointment by rememberSaveable { mutableLongStateOf(-1L) }
     var backStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     var confirmExit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -117,7 +118,7 @@ fun TeacherApp(store: TeacherStore) {
         catch (e: Exception) { error = e.message ?: "Não foi possível abrir seus dados." }
     }
 
-    fun commit(next: String? = null, operation: () -> Unit) {
+    fun commit(next: String? = null, onSuccess: (() -> Unit)? = null, operation: () -> Unit) {
         if (busy) return
         scope.launch {
             busy = true
@@ -125,6 +126,7 @@ fun TeacherApp(store: TeacherStore) {
             try {
                 val fresh = withContext(Dispatchers.IO) { operation(); store.read() }
                 data = fresh
+                onSuccess?.invoke()
                 if (next != null) afterSave(next)
             } catch (e: Exception) { error = e.message ?: "Não foi possível salvar. Tente novamente." }
             finally { busy = false }
@@ -197,8 +199,18 @@ fun TeacherApp(store: TeacherStore) {
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) })
                     "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { back() }, { title, subject, day, time, objective, content, method -> commit("planning") { store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method) } })
-                    "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { navigate("newAppointment") })
-                    "newAppointment" -> AppointmentForm(selectedDay, { back() }, { title, day, time -> commit("agenda") { store.addAppointment(title, day, time) } })
+                    "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { navigate("newAppointment") }, { appointmentId ->
+              selectedAppointment = appointmentId
+              navigate("editAppointment")
+          })
+          "newAppointment" -> AppointmentForm(selectedDay, { back() }, { title, day, time ->
+              commit("agenda", onSuccess = { selectedDay = day }) { store.addAppointment(title, day, time) }
+          })
+          "editAppointment" -> snapshot.appointments.firstOrNull { it.id == selectedAppointment }?.let { appointment ->
+              AppointmentForm(appointment.date, { back() }, { title, day, time ->
+                  commit("agenda", onSuccess = { selectedDay = day }) { store.updateAppointment(appointment.id, title, day, time) }
+              }, initial = appointment, delete = { commit("agenda") { store.deleteAppointment(appointment.id) } })
+          }
                     "files" -> FileCatalogScreen(
               files = snapshot.files,
               importFile = { filePicker.launch(arrayOf("*/*")) },
@@ -219,7 +231,7 @@ fun TeacherApp(store: TeacherStore) {
                 Spacer(Modifier.height(24.dp))
             }
         }
-        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "profile")) {
+        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "editAppointment", "profile")) {
             BottomBar(tab) { destination -> navigate(when (destination) { "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more" }, root = true) }
         }
     }
@@ -655,28 +667,41 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit, add: () -> Unit) {
+@Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit, add: () -> Unit, open: (Long) -> Unit) {
     Heading("Compromissos", "Organize sua rotina e foque no que importa")
     DaySwitch(day, onDay)
     Subtitle("Agenda do dia")
     val events = data.appointments.filter { it.date == day }
     if (events.isEmpty()) Panel { Text("Nenhum compromisso para esta data.", color = ink) }
-    events.forEach { item -> ActionTile("⏰", item.title, item.time) {} }
+    events.forEach { item -> ActionTile("⏰", item.title, item.time) { open(item.id) } }
     Spacer(Modifier.height(12.dp))
     PrimaryButton("+ Novo compromisso", click = add)
 }
 
-@Composable private fun AppointmentForm(initialDay: String, back: () -> Unit, save: (String, String, String) -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var day by rememberSaveable { mutableStateOf(initialDay) }
-    var time by rememberSaveable { mutableStateOf("08:00") }
-    Heading("Novo compromisso", "Adicione um item à sua agenda", back)
+@Composable private fun AppointmentForm(initialDay: String, back: () -> Unit, save: (String, String, String) -> Unit,
+ initial: Appointment? = null, delete: (() -> Unit)? = null) {
+    var title by rememberSaveable(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
+    var day by rememberSaveable(initial?.id) { mutableStateOf(initial?.date ?: initialDay) }
+    var time by rememberSaveable(initial?.id) { mutableStateOf(initial?.time ?: "08:00") }
+    var confirmDeletion by remember { mutableStateOf(false) }
+    Heading(if (initial == null) "Novo compromisso" else "Editar compromisso", "Organize sua agenda", back)
     Panel {
         Input("Título do compromisso", title, { title = it })
         Input("Data (AAAA-MM-DD)", day, { day = it })
         Input("Horário (HH:MM)", time, { time = it })
-        PrimaryButton("Salvar compromisso") { save(title, day, time) }
+        PrimaryButton(if (initial == null) "Salvar compromisso" else "Salvar alterações") { save(title, day, time) }
+        if (delete != null) {
+  Spacer(Modifier.height(12.dp))
+  PrimaryButton("Excluir compromisso", secondary = true) { confirmDeletion = true }
+        }
     }
+    if (confirmDeletion && delete != null) AlertDialog(
+        onDismissRequest = { confirmDeletion = false },
+        title = { Text("Excluir compromisso?") },
+        text = { Text("Esta exclusão é permanente e afeta somente este compromisso.") },
+        confirmButton = { TextButton(onClick = { confirmDeletion = false; delete() }) { Text("Excluir definitivamente") } },
+        dismissButton = { TextButton(onClick = { confirmDeletion = false }) { Text("Cancelar") } }
+    )
 }
 
 @Composable private fun MoreScreen(data: TeacherSnapshot, go: (String) -> Unit) {
