@@ -1,8 +1,11 @@
 name: One-shot observation CRUD implementation
 on:
   push:
-    branches: [feat/1-android-bootstrap]
-    paths: [.github/workflows/one-shot-observation-crud.yml]
+    branches:
+      - feat/1-android-bootstrap
+    paths:
+      - tools/apply_observation_crud.py
+      - .github/workflows/one-shot-observation-crud.yml
 permissions:
   contents: write
 jobs:
@@ -12,189 +15,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat/1-android-bootstrap
-      - name: Apply guarded observation CRUD patch
-        shell: bash
+      - name: Apply guarded source patch
+        run: python3 tools/apply_observation_crud.py
+      - name: Commit implementation
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          store = Path('app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt')
-          ui = Path('app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt')
-          tests = Path('app/src/androidTest/java/com/sayvabr/assistentepedagogico/data/TeacherStoreInstrumentedTest.kt')
-          s, t, q = store.read_text(), ui.read_text(), tests.read_text()
-          def rep(src, old, new, label):
-              n = src.count(old)
-              if n != 1: raise RuntimeError(f'{label}: expected 1 anchor, got {n}')
-              print('PATCH', label)
-              return src.replace(old, new, 1)
-
-          old = '''    fun addAppointment(title: String, day: String, time: String) {'''
-          new = '''    /** Edits an existing pedagogical observation without changing its identity or original date. */
-    fun updateObservation(classroomId: Long, observationId: Long, studentId: Long?, kind: String, body: String, shareApproved: Boolean) {
-        require(body.trim().length >= 5) { "Descreva a observação com ao menos 5 caracteres." }
-        require(kind in listOf("Comportamento", "Participação", "Aprendizagem", "Outro")) { "Tipo de observação inválido." }
-        if (studentId != null) {
-            readableDatabase.rawQuery("SELECT 1 FROM students WHERE id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString())).use { c ->
-                require(c.moveToFirst()) { "Aluno não pertence a esta turma." }
-            }
-        }
-        val changed = writableDatabase.update("observations", values("student_id" to studentId, "kind" to kind, "body" to body.trim(), "share_approved" to shareApproved), "id=? AND classroom_id=?", arrayOf(observationId.toString(), classroomId.toString()))
-        require(changed == 1) { "Observação não encontrada nesta turma." }
-    }
-
-    /** Permanently deletes only the selected observation. */
-    fun deleteObservation(classroomId: Long, observationId: Long) {
-        val removed = writableDatabase.delete("observations", "id=? AND classroom_id=?", arrayOf(observationId.toString(), classroomId.toString()))
-        require(removed == 1) { "Observação não encontrada nesta turma." }
-    }
-
-    fun addAppointment(title: String, day: String, time: String) {'''
-          s = rep(s, old, new, 'observation store CRUD')
-
-          t = rep(t,
-'''    var selectedLesson by rememberSaveable { mutableLongStateOf(-1L) }
-''',
-'''    var selectedLesson by rememberSaveable { mutableLongStateOf(-1L) }
-    var selectedObservation by rememberSaveable { mutableLongStateOf(-1L) }
-''', 'selected observation state')
-
-          t = rep(t,
-'''          "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { navigate(it) },
-              onStudent = { selectedStudent = it; navigate("editStudent") })
-''',
-'''          "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { navigate(it) },
-              onStudent = { selectedStudent = it; navigate("editStudent") },
-              onObservation = { selectedObservation = it; navigate("editObservation") })
-''', 'class detail observation navigation')
-
-          t = rep(t,
-'''                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
-''',
-'''                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
-                    "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull { it.id == selectedObservation && it.classroomId == currentClass.id }?.let { observation ->
-                        ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share ->
-                            commit("classDetail") { store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share) }
-                        }, initial = observation, delete = { commit("classDetail") { store.deleteObservation(currentClass.id, observation.id) } })
-                    }
-''', 'observation edit route')
-
-          t = rep(t,
-'''"newLesson", "editLesson", "observation", "newAppointment"''',
-'''"newLesson", "editLesson", "observation", "editObservation", "newAppointment"''', 'hide tabs while editing observation')
-
-          t = rep(t,
-'''@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit) {''',
-'''@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit, onObservation: (Long) -> Unit) {''', 'class detail signature')
-
-          old = '''    data.observations.filter { it.classroomId == classroom.id }.take(5).forEach { note ->
-        Panel {
-            Text("${note.kind} • ${note.date}", color = blue, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.height(7.dp))
-            Text(note.body, color = ink)
-        }
-        Spacer(Modifier.height(8.dp))
-    }'''
-          new = '''    data.observations.filter { it.classroomId == classroom.id }.take(5).forEach { note ->
-        Surface(Modifier.fillMaxWidth().clickable { onObservation(note.id) }, shape = RoundedCornerShape(18.dp), color = Color.White, border = BorderStroke(1.dp, outline)) {
-            Column(Modifier.padding(15.dp)) {
-                Text("${note.kind} • ${note.date}", color = blue, fontWeight = FontWeight.ExtraBold)
-                Spacer(Modifier.height(7.dp))
-                Text(note.body, color = ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(7.dp))
-                Text("Toque para consultar ou editar", color = ink.copy(alpha = .65f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-    }'''
-          t = rep(t, old, new, 'actionable recent observations')
-
-          start = t.index('@Composable private fun ObservationForm(')
-          end = t.index('\n@Composable private fun PlanningScreen', start)
-          old = t[start:end]
-          new = '''@Composable private fun ObservationForm(data: TeacherSnapshot, classroom: Classroom, back: () -> Unit,
-    save: (Long?, String, String, Boolean) -> Unit, initial: Observation? = null, delete: (() -> Unit)? = null) {
-    var studentId by rememberSaveable(initial?.id) { mutableLongStateOf(initial?.studentId ?: -1L) }
-    var kind by rememberSaveable(initial?.id) { mutableStateOf(initial?.kind ?: "Participação") }
-    var body by rememberSaveable(initial?.id) { mutableStateOf(initial?.body.orEmpty()) }
-    var approved by rememberSaveable(initial?.id) { mutableStateOf(initial?.shareApproved ?: false) }
-    var confirmDeletion by remember { mutableStateOf(false) }
-    Heading(if (initial == null) "Nova observação" else "Editar observação", if (initial == null) "Registre uma observação sobre a turma" else "Registro de ${initial.date}", back)
-    Panel {
-        Text("Aluno (opcional)", fontWeight = FontWeight.Bold, color = ink)
-        Spacer(Modifier.height(8.dp))
-        Choices(listOf("Turma inteira") + data.students.filter { it.classroomId == classroom.id }.map { it.name },
-            if (studentId == -1L) "Turma inteira" else data.students.firstOrNull { it.id == studentId }?.name ?: "Turma inteira") { label ->
-            studentId = data.students.firstOrNull { it.classroomId == classroom.id && it.name == label }?.id ?: -1L
-        }
-    }
-    Spacer(Modifier.height(11.dp))
-    Panel {
-        Text("Tipo de observação", fontWeight = FontWeight.Bold, color = ink)
-        Spacer(Modifier.height(9.dp))
-        Choices(listOf("Comportamento", "Participação", "Aprendizagem", "Outro"), kind) { kind = it }
-        Input("Descrição objetiva e respeitosa", body, { if (it.length <= 500) body = it }, multiline = true)
-        Text("${body.length}/500", fontSize = 12.sp, color = ink.copy(alpha = .7f))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Autorizar compartilhamento futuro", color = ink, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("Nenhuma informação é enviada a famílias nesta versão.", fontSize = 11.sp, color = ink.copy(alpha = .7f))
-            }
-            Switch(approved, { approved = it })
-        }
-        Spacer(Modifier.height(12.dp))
-        PrimaryButton(if (initial == null) "Salvar observação" else "Salvar alterações") { save(studentId.takeIf { it != -1L }, kind, body, approved) }
-        if (delete != null) {
-            Spacer(Modifier.height(12.dp))
-            PrimaryButton("Excluir observação", secondary = true) { confirmDeletion = true }
-        }
-    }
-    if (confirmDeletion && delete != null) AlertDialog(
-        onDismissRequest = { confirmDeletion = false },
-        title = { Text("Excluir observação?") },
-        text = { Text("Esta exclusão é permanente e afeta somente este registro pedagógico.") },
-        confirmButton = { TextButton(onClick = { confirmDeletion = false; delete() }) { Text("Excluir definitivamente") } },
-        dismissButton = { TextButton(onClick = { confirmDeletion = false }) { Text("Cancelar") } }
-    )
-}
-'''
-          t = t[:start] + new + t[end:]
-          print('PATCH observation form edit/delete')
-
-          anchor = '''    @Test fun invalidAttendanceBatchRollsBackAllMarks() {'''
-          test = '''    @Test fun observationEditAndDeleteAreScopedAndPersist() {
-        val first = db()
-        val a = first.createClass("Turma Observação A", "Ensino Fundamental", "Matutino")
-        val b = first.createClass("Turma Observação B", "Ensino Fundamental", "Vespertino")
-        first.addStudent(a, "Iara")
-        first.addStudent(b, "João")
-        val iara = first.read().students.first { it.classroomId == a }.id
-        val joao = first.read().students.first { it.classroomId == b }.id
-        first.addObservation(a, iara, "Participação", "Registro original da aluna.", false)
-        val note = first.read().observations.single()
-        rejects { first.updateObservation(b, note.id, joao, "Aprendizagem", "Tentativa indevida.", true) }
-        rejects { first.updateObservation(a, note.id, joao, "Aprendizagem", "Aluno de outra turma.", true) }
-        first.updateObservation(a, note.id, null, "Aprendizagem", "Registro pedagógico revisado.", true)
-        var saved = reopen().read().observations.single()
-        assertEquals(note.id, saved.id)
-        assertNull(saved.studentId)
-        assertEquals("Aprendizagem", saved.kind)
-        assertEquals("Registro pedagógico revisado.", saved.body)
-        assertTrue(saved.shareApproved)
-        rejects { db().deleteObservation(b, note.id) }
-        assertEquals(1, reopen().read().observations.size)
-        db().deleteObservation(a, note.id)
-        assertTrue(reopen().read().observations.isEmpty())
-        rejects { db().deleteObservation(a, note.id) }
-    }
-
-'''
-          q = rep(q, anchor, test + anchor, 'observation CRUD persistence test')
-
-          store.write_text(s); ui.write_text(t); tests.write_text(q)
-          PY
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt app/src/androidTest/java/com/sayvabr/assistentepedagogico/data/TeacherStoreInstrumentedTest.kt
-          git rm -f .github/workflows/one-shot-observation-crud.yml
+          git rm -f .github/workflows/one-shot-observation-crud.yml tools/apply_observation_crud.py
           git commit -m 'feat(records): add persistent observation edit and delete'
           git push origin HEAD:feat/1-android-bootstrap
