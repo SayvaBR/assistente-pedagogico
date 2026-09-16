@@ -2,34 +2,37 @@ package com.sayvabr.assistentepedagogico.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
+import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Run ONLY on a disposable emulator: each test deletes the app's test database. */
+/** These tests delete the app's database. Never execute them on a physical teacher device. */
 @RunWith(AndroidJUnit4::class)
 class TeacherStoreInstrumentedTest {
     private lateinit var context: Context
     private var store: TeacherStore? = null
+    private var disposableEmulator = false
 
     @Before fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        store?.close()
+        disposableEmulator = Build.HARDWARE.contains("ranchu", ignoreCase = true) ||
+            Build.HARDWARE.contains("goldfish", ignoreCase = true) ||
+            Build.FINGERPRINT.startsWith("generic") || Build.PRODUCT.startsWith("sdk") ||
+            Build.MODEL.contains("Emulator", ignoreCase = true)
+        assumeTrue("Refusing destructive tests outside a disposable Android emulator", disposableEmulator)
         context.deleteDatabase("pedagogico.db")
     }
 
     @After fun tearDown() {
         store?.close()
         store = null
-        context.deleteDatabase("pedagogico.db")
+        if (disposableEmulator) context.deleteDatabase("pedagogico.db")
     }
 
     private fun db(): TeacherStore = store ?: TeacherStore(context).also { store = it }
@@ -45,24 +48,22 @@ class TeacherStoreInstrumentedTest {
             block()
             fail("Expected an IllegalArgumentException")
         } catch (_: IllegalArgumentException) {
-            // A rejected operation must leave persisted records unchanged.
+            // An invalid operation must leave persisted records untouched.
         }
     }
 
-    @Test fun profileClassStudentLessonAttendanceObservationAgendaAndFileSurviveReopenAndEdit() {
+    @Test fun teacherRecordsSurviveDatabaseReopenAndEdits() {
         val first = db()
         first.saveProfile("Ana Maria")
-        val classId = first.createClass("5º A", "Ensino Fundamental", "Matutino")
-        first.addStudent(classId, "Bruna")
+        val classroomId = first.createClass("5º A", "Ensino Fundamental", "Matutino")
+        first.addStudent(classroomId, "Bruna")
         val studentId = first.read().students.single().id
-        first.saveLesson(classId, "Frações", "Matemática", "2026-09-16", "08:00", "Comparar frações", "Frações", "Roda de conversa")
-        first.saveAttendance(classId, "2026-09-16", mapOf(studentId to "P"))
-        first.addObservation(classId, studentId, "Participação", "Participou da atividade.", false)
+        first.saveLesson(classroomId, "Frações", "Matemática", "2026-09-16", "08:00", "Comparar frações", "Frações", "Roda de conversa")
+        first.saveAttendance(classroomId, "2026-09-16", mapOf(studentId to "P"))
+        first.addObservation(classroomId, studentId, "Participação", "Participou da atividade.", false)
         first.addAppointment("Reunião pedagógica", "2026-09-16", "15:00")
         first.addFile("plano.pdf", "content://example/document/123")
-
-        val second = reopen()
-        val saved = second.read()
+        val saved = reopen().read()
         assertEquals("Ana Maria", saved.profile?.name)
         assertEquals("5º A", saved.classrooms.single().name)
         assertEquals("Bruna", saved.students.single().name)
@@ -71,10 +72,9 @@ class TeacherStoreInstrumentedTest {
         assertEquals(studentId, saved.observations.single().studentId)
         assertEquals("Reunião pedagógica", saved.appointments.single().title)
         assertEquals("plano.pdf", saved.files.single().name)
-
-        second.saveProfile("Ana Beatriz")
-        second.updateClass(classId, "5º B", "Ensino Fundamental", "Vespertino")
-        second.updateStudent(classId, studentId, "Bruna Silva")
+        db().saveProfile("Ana Beatriz")
+        db().updateClass(classroomId, "5º B", "Ensino Fundamental", "Vespertino")
+        db().updateStudent(classroomId, studentId, "Bruna Silva")
         val edited = reopen().read()
         assertEquals("Ana Beatriz", edited.profile?.name)
         assertEquals("5º B", edited.classrooms.single().name)
@@ -84,7 +84,7 @@ class TeacherStoreInstrumentedTest {
         assertEquals(1, edited.attendance.size)
     }
 
-    @Test fun archiveAndRestoreKeepRecordsAndOnlyTwoActiveClassesAreAllowed() {
+    @Test fun archiveRestorePreserveHistoryAndEnforceTwoActiveClasses() {
         val first = db()
         val a = first.createClass("Turma A", "Educação Infantil", "Matutino")
         first.addStudent(a, "Catarina")
@@ -97,18 +97,17 @@ class TeacherStoreInstrumentedTest {
         assertTrue(first.read().classrooms.first { it.id == a }.archived)
         first.setClassArchived(b, true)
         first.setClassArchived(a, false)
-
-        val persisted = reopen().read()
-        assertFalse(persisted.classrooms.first { it.id == a }.archived)
-        assertTrue(persisted.classrooms.first { it.id == b }.archived)
-        assertFalse(persisted.classrooms.first { it.id == c }.archived)
-        assertEquals(2, persisted.classrooms.count { !it.archived })
-        assertEquals("Catarina", persisted.students.single().name)
-        assertEquals("Leitura", persisted.lessons.single().title)
-        assertEquals(3, persisted.classrooms.size)
+        val saved = reopen().read()
+        assertFalse(saved.classrooms.first { it.id == a }.archived)
+        assertTrue(saved.classrooms.first { it.id == b }.archived)
+        assertFalse(saved.classrooms.first { it.id == c }.archived)
+        assertEquals(2, saved.classrooms.count { !it.archived })
+        assertEquals(3, saved.classrooms.size)
+        assertEquals("Catarina", saved.students.single().name)
+        assertEquals("Leitura", saved.lessons.single().title)
     }
 
-    @Test fun deletingStudentCascadesAttendanceButPreservesObservationAndOtherStudents() {
+    @Test fun studentDeletionCascadesAttendanceButKeepsUnlinkedObservation() {
         val first = db()
         val classroomId = first.createClass("4º A", "Ensino Fundamental", "Matutino")
         first.addStudent(classroomId, "Daniel")
@@ -127,7 +126,7 @@ class TeacherStoreInstrumentedTest {
         assertNull(saved.observations.single().studentId)
     }
 
-    @Test fun invalidAttendanceRollsBackEntireBatch() {
+    @Test fun invalidAttendanceBatchRollsBackAllMarks() {
         val first = db()
         val classroomId = first.createClass("5º C", "Ensino Fundamental", "Matutino")
         first.addStudent(classroomId, "Fernanda")
@@ -138,8 +137,7 @@ class TeacherStoreInstrumentedTest {
         assertTrue(reopen().read().attendance.all { it.status == "P" })
     }
 
-    @Test fun databaseV1MigratesToV2WithoutLosingAnyTable() {
-        // Recreate the exact v1 schema to test upgrades from an already-installed application.
+    @Test fun migrationV1ToV2PreservesEveryExistingTable() {
         val file = context.getDatabasePath("pedagogico.db")
         file.parentFile?.mkdirs()
         SQLiteDatabase.openOrCreateDatabase(file, null).use { old ->
