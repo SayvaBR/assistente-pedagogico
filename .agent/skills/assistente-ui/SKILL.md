@@ -1,0 +1,2 @@
+# assistente-ui
+Identidade blue-first: #1CB0F6, #1899D6, #102A56, #DDF4FF, superfícies brancas; superfícies arredondadas, hierarquia tipográfica forte, feedback tátil. Sem gradientes, glassmorphism ou componentes Material com aparência padrão. Auditar contraste: não presumir que texto branco no azul claro passa WCAG; preferir navy quando necessário. Cada PR de UI exige screenshot e estados relevantes.

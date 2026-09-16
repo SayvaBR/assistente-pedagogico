@@ -1,0 +1,51 @@
+name: Android visual evidence
+# Capturas visuais automáticas por PR suspensas por decisão do titular.
+# A suíte permanece disponível sob demanda para gates relevantes de UX/release.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install compile SDK and build tools
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Enable emulator hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Build, install, launch and capture running Android screens
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -e
+            gradle --no-daemon :app:assembleDebug
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.sayvabr.assistentepedagogico/.MainActivity
+            python3 tools/capture_android_screens.py
+      - name: Upload REAL screenshots (including partial evidence if an interaction fails)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ap-android-real-screenshots
+          path: visual-evidence/*.png
+          if-no-files-found: warn
