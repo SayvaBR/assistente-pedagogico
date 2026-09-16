@@ -1,0 +1,50 @@
+name: Guarded Android Back repair retry
+on:
+  push:
+    branches: [feat/1-android-bootstrap]
+    paths:
+      - .github/workflows/one-shot-navigation-retry.yml
+permissions:
+  contents: write
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/1-android-bootstrap
+          persist-credentials: true
+      - name: Apply checked navigation source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          workflow = Path('.github/workflows/one-shot-navigation-repair.yml').read_text()
+          lines = workflow.splitlines()
+          start = next(i for i, line in enumerate(lines) if "python3 - <<'PY'" in line)
+          end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == 'PY')
+          script = textwrap.dedent('\n'.join(lines[start+1:end]))
+          for old, new in [
+              ("'edit classroom back')", "'edit classroom and attendance back', count=2)"),
+              ("'archive classroom back')", "'archive and student edit back', count=2)"),
+          ]:
+              assert script.count(old) == 1, old
+              script = script.replace(old, new)
+          edited = []
+          for line in script.splitlines():
+              if "'attendance back')" in line or "'edit student back')" in line:
+                  continue
+              edited.append(line)
+          script = '\n'.join(edited) + '\n'
+          compile(script, 'guarded_navigation_source.py', 'exec')
+          exec(compile(script, 'guarded_navigation_source.py', 'exec'))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          git rm -f .github/workflows/one-shot-navigation-repair.yml .github/workflows/one-shot-navigation-retry.yml
+          git commit -m 'fix(android): handle Back across forms, tabs, onboarding and explicit exit'
+          git push origin HEAD:feat/1-android-bootstrap
