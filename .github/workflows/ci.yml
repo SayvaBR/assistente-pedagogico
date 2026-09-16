@@ -23,11 +23,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.6.0'
+      # Build outputs exist temporarily in the runner for validation only.
+      # Do not publish an APK until product, UX, privacy and release gates pass.
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: ap-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
