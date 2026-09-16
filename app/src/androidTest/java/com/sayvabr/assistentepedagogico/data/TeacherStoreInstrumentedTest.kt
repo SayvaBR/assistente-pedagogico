@@ -152,6 +152,52 @@ class TeacherStoreInstrumentedTest {
         rejects { db().removeFile(file.id) }
     }
 
+    @Test fun lessonEditAndArchiveRestorePreserveIdentityAndClassIsolation() {
+        val first = db()
+        val a = first.createClass("Turma A", "Ensino Fundamental", "Matutino")
+        val b = first.createClass("Turma B", "Ensino Médio", "Vespertino")
+        first.saveLesson(a, "Plano original", "História", "2026-09-16", "08:00", "Aprender", "Tema", "Discussão")
+        val original = first.read().lessons.single()
+        rejects { first.updateLesson(b, original.id, "Indevido", "História", "2026-09-17", "10:00", "Aprender", "Tema", "Discussão") }
+        rejects { first.setLessonArchived(b, original.id, true) }
+        assertEquals("Plano original", first.read().lessons.single().title)
+        first.updateLesson(a, original.id, "Plano revisado", "Geografia", "2026-09-18", "09:30", "Pesquisar", "Mapas", "Pesquisa de campo")
+        var saved = reopen().read().lessons.single()
+        assertEquals(original.id, saved.id)
+        assertEquals("Plano revisado", saved.title)
+        assertEquals("Geografia", saved.subject)
+        assertEquals("2026-09-18", saved.date)
+        assertEquals("09:30", saved.time)
+        assertFalse(saved.archived)
+        db().setLessonArchived(a, original.id, true)
+        saved = reopen().read().lessons.single()
+        assertTrue(saved.archived)
+        rejects { db().updateLesson(a, original.id, "Inválido", "Geografia", "2026-09-18", "09:30", "Pesquisar", "Mapas", "Pesquisa") }
+        db().setLessonArchived(a, original.id, false)
+        saved = reopen().read().lessons.single()
+        assertFalse(saved.archived)
+        assertEquals("Plano revisado", saved.title)
+        assertEquals(original.id, saved.id)
+    }
+
+    @Test fun migrationV2ToV3KeepsLessonAndAddsArchiveFlag() {
+        val file = context.getDatabasePath("pedagogico.db")
+        file.parentFile?.mkdirs()
+        SQLiteDatabase.openOrCreateDatabase(file, null).use { old ->
+  TeacherStore(context).onCreate(old)
+  old.execSQL("DROP TABLE lessons")
+  old.execSQL("CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, title TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL, objective TEXT NOT NULL, content TEXT NOT NULL, method TEXT NOT NULL)")
+  old.execSQL("INSERT INTO classrooms (id,name,stage,shift,archived) VALUES (1,'Turma v2','Educação Infantil','Matutino',0)")
+  old.execSQL("INSERT INTO lessons (classroom_id,title,subject,day,time,objective,content,method) VALUES (1,'Plano v2','Linguagem','2026-09-16','08:00','Objetivo','Conteúdo','Método')")
+  old.version = 2
+        }
+        val migrated = db().read()
+        assertEquals("Plano v2", migrated.lessons.single().title)
+        assertFalse(migrated.lessons.single().archived)
+        db().setLessonArchived(1L, migrated.lessons.single().id, true)
+        assertTrue(reopen().read().lessons.single().archived)
+    }
+
     @Test fun migrationV1ToV2PreservesEveryExistingTable() {
         val file = context.getDatabasePath("pedagogico.db")
         file.parentFile?.mkdirs()
@@ -182,6 +228,7 @@ class TeacherStoreInstrumentedTest {
         assertFalse(migrated.classrooms.single().archived)
         assertEquals("Helena", migrated.students.single().name)
         assertEquals("Aula antiga", migrated.lessons.single().title)
+        assertFalse(migrated.lessons.single().archived)
         assertEquals("P", migrated.attendance.single().status)
         assertEquals("Observação antiga", migrated.observations.single().body)
         assertEquals("Agenda antiga", migrated.appointments.single().title)

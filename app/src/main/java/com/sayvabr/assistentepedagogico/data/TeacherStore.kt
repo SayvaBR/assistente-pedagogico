@@ -11,7 +11,7 @@ import java.time.LocalTime
 data class TeacherProfile(val name: String)
 data class Classroom(val id: Long, val name: String, val stage: String, val shift: String, val archived: Boolean = false)
 data class Student(val id: Long, val classroomId: Long, val name: String)
-data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String)
+data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String, val archived: Boolean = false)
 data class Attendance(val classroomId: Long, val studentId: Long, val date: String, val status: String)
 data class Observation(val id: Long, val classroomId: Long, val studentId: Long?, val kind: String, val body: String, val date: String, val shareApproved: Boolean)
 data class Appointment(val id: Long, val title: String, val date: String, val time: String)
@@ -27,7 +27,7 @@ data class TeacherSnapshot(
     val files: List<SavedFile>,
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, 2) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, 3) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -35,7 +35,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             "CREATE TABLE profile (id INTEGER PRIMARY KEY CHECK(id=1), name TEXT NOT NULL)",
             "CREATE TABLE classrooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, stage TEXT NOT NULL, shift TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
             "CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, name TEXT NOT NULL)",
-            "CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, title TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL, objective TEXT NOT NULL, content TEXT NOT NULL, method TEXT NOT NULL)",
+            "CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, title TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL, objective TEXT NOT NULL, content TEXT NOT NULL, method TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
             "CREATE TABLE attendance (classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, day TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('P','F')), PRIMARY KEY(student_id,day))",
             "CREATE TABLE observations (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL, body TEXT NOT NULL, day TEXT NOT NULL, share_approved INTEGER NOT NULL DEFAULT 0)",
             "CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL)",
@@ -44,13 +44,10 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Preserve all user data: archived is the only schema change from v1 to v2.
-        if (oldVersion == 1 && newVersion == 2) {
-  db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
-        } else {
-  error("Unsupported database migration from $oldVersion to $newVersion")
-        }
-    }
+    require(oldVersion in 1..2 && newVersion == 3) { "Unsupported database migration from $oldVersion to $newVersion" }
+    if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+    if (oldVersion < 3) db.execSQL("ALTER TABLE lessons ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+}
 
     fun read(): TeacherSnapshot {
         val db = readableDatabase
@@ -61,7 +58,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         val students = mutableListOf<Student>()
         db.rawQuery("SELECT id,classroom_id,name FROM students ORDER BY name COLLATE NOCASE", null).use { c -> while (c.moveToNext()) students += Student(c.getLong(0), c.getLong(1), c.getString(2)) }
         val lessons = mutableListOf<Lesson>()
-        db.rawQuery("SELECT id,classroom_id,title,subject,day,time,objective,content,method FROM lessons ORDER BY day,time", null).use { c -> while (c.moveToNext()) lessons += Lesson(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8)) }
+        db.rawQuery("SELECT id,classroom_id,title,subject,day,time,objective,content,method,archived FROM lessons ORDER BY day,time", null).use { c -> while (c.moveToNext()) lessons += Lesson(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8), c.getInt(9) == 1) }
         val attendance = mutableListOf<Attendance>()
         db.rawQuery("SELECT classroom_id,student_id,day,status FROM attendance", null).use { c -> while (c.moveToNext()) attendance += Attendance(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3)) }
         val observations = mutableListOf<Observation>()
@@ -147,10 +144,25 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun saveLesson(classroomId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {
+    require(title.isNotBlank() && subject.isNotBlank() && objective.isNotBlank()) { "Preencha o título, a disciplina e o objetivo." }
+    LocalDate.parse(date)
+    LocalTime.parse(time)
+    writableDatabase.insertOrThrow("lessons", null, values("classroom_id" to classroomId, "title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()))
+}
+
+    /** Edits only a plan belonging to the selected classroom; keeps its ID and other records untouched. */
+    fun updateLesson(classroomId: Long, lessonId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {
         require(title.isNotBlank() && subject.isNotBlank() && objective.isNotBlank()) { "Preencha o título, a disciplina e o objetivo." }
         LocalDate.parse(date)
-        require(Regex("\\d{2}:\\d{2}").matches(time)) { "Horário inválido: use HH:MM." }
-        writableDatabase.insertOrThrow("lessons", null, values("classroom_id" to classroomId, "title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()))
+        LocalTime.parse(time)
+        val changed = writableDatabase.update("lessons", values("title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()), "id=? AND classroom_id=? AND archived=0", arrayOf(lessonId.toString(), classroomId.toString()))
+        require(changed == 1) { "Plano não encontrado nesta turma ou está arquivado." }
+    }
+
+    /** Reversible archival preserves the lesson, classroom and all historical data. */
+    fun setLessonArchived(classroomId: Long, lessonId: Long, archived: Boolean) {
+        val changed = writableDatabase.update("lessons", values("archived" to archived), "id=? AND classroom_id=?", arrayOf(lessonId.toString(), classroomId.toString()))
+        require(changed == 1) { "Plano não encontrado nesta turma." }
     }
 
     fun saveAttendance(classroomId: Long, day: String, marks: Map<Long, String>) {

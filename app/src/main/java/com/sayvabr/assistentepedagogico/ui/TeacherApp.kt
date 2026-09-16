@@ -55,6 +55,7 @@ fun TeacherApp(store: TeacherStore) {
     var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
     var selectedAppointment by rememberSaveable { mutableLongStateOf(-1L) }
+    var selectedLesson by rememberSaveable { mutableLongStateOf(-1L) }
     var backStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     var confirmExit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -197,8 +198,19 @@ fun TeacherApp(store: TeacherStore) {
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { back() }, { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } })
                     "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
-                    "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) })
-                    "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { back() }, { title, subject, day, time, objective, content, method -> commit("planning") { store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method) } })
+                    "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) },
+              openLesson = { lessonId -> selectedLesson = lessonId; navigate("editLesson") },
+              restoreLesson = { lesson -> commit("planning") { store.setLessonArchived(lesson.classroomId, lesson.id, false) } })
+          "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { back() }, { title, subject, day, time, objective, content, method ->
+              commit("planning", onSuccess = { selectedDay = day }) { store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method) }
+          })
+          "editLesson" -> snapshot.lessons.firstOrNull { it.id == selectedLesson && !it.archived }?.let { lesson ->
+              snapshot.classrooms.firstOrNull { it.id == lesson.classroomId && !it.archived }?.let { lessonClass ->
+                  LessonForm(lessonClass, lesson.date, { back() }, { title, subject, day, time, objective, content, method ->
+                      commit("planning", onSuccess = { selectedDay = day }) { store.updateLesson(lessonClass.id, lesson.id, title, subject, day, time, objective, content, method) }
+                  }, initial = lesson, archive = { commit("planning") { store.setLessonArchived(lessonClass.id, lesson.id, true) } })
+              }
+          } ?: Panel { Text("Plano indisponível. Retorne ao Planejamento.", color = ink); PrimaryButton("Voltar ao planejamento") { navigate("planning", root = true) } }
                     "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { navigate("newAppointment") }, { appointmentId ->
               selectedAppointment = appointmentId
               navigate("editAppointment")
@@ -231,7 +243,7 @@ fun TeacherApp(store: TeacherStore) {
                 Spacer(Modifier.height(24.dp))
             }
         }
-        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "editAppointment", "profile")) {
+        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "editLesson", "observation", "newAppointment", "editAppointment", "profile")) {
             BottomBar(tab) { destination -> navigate(when (destination) { "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more" }, root = true) }
         }
     }
@@ -623,38 +635,73 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun PlanningScreen(data: TeacherSnapshot, classroom: Classroom?, day: String, onDay: (String) -> Unit, go: (String) -> Unit) {
-    Heading("Planejamento", "Aulas organizadas para sua rotina")
-    DaySwitch(day, onDay)
-    Subtitle("${data.lessons.count { it.date == day }} aula(s) programada(s)")
-    val lessons = data.lessons.filter { it.date == day && (classroom == null || it.classroomId == classroom.id) }
-    if (lessons.isEmpty()) Panel { Text("Nenhum plano cadastrado neste dia.", color = ink) }
+@Composable private fun PlanningScreen(data: TeacherSnapshot, classroom: Classroom?, day: String, onDay: (String) -> Unit,
+        go: (String) -> Unit, openLesson: (Long) -> Unit, restoreLesson: (Lesson) -> Unit) {
+    Heading("Planejamento", "Suas aulas por dia, semana e mês")
+    var view by rememberSaveable { mutableStateOf("Dia") }
+    Choices(listOf("Dia", "Semana", "Mês", "Arquivados"), view) { view = it }
+    val focus = LocalDate.parse(day)
+    val start = when (view) {
+        "Semana" -> focus.minusDays((focus.dayOfWeek.value - 1).toLong())
+        "Mês" -> focus.withDayOfMonth(1)
+        else -> focus
+    }
+    val end = when (view) {
+        "Semana" -> start.plusDays(6)
+        "Mês" -> start.plusMonths(1).minusDays(1)
+        else -> focus
+    }
+    if (view == "Dia") DaySwitch(day, onDay)
+    else if (view != "Arquivados") {
+        Panel {
+  Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+      Text("‹", Modifier.clickable { onDay(if (view == "Semana") focus.minusWeeks(1).toString() else focus.minusMonths(1).toString()) }.padding(6.dp), color = blue, fontSize = 29.sp)
+      Text(if (view == "Semana") "${start.format(DateTimeFormatter.ofPattern("dd/MM"))} – ${end.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))}"
+ else start.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale("pt", "BR"))).replaceFirstChar { it.uppercase() },
+ color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+      Text("›", Modifier.clickable { onDay(if (view == "Semana") focus.plusWeeks(1).toString() else focus.plusMonths(1).toString()) }.padding(6.dp), color = blue, fontSize = 29.sp)
+  }
+        }
+        Spacer(Modifier.height(14.dp))
+    }
+    val lessons = data.lessons.filter { lesson ->
+        lesson.classroomId == classroom?.id && if (view == "Arquivados") lesson.archived
+        else !lesson.archived && lesson.date >= start.toString() && lesson.date <= end.toString()
+    }.sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
+    Subtitle(if (view == "Arquivados") "Planos arquivados (${lessons.size})" else "${lessons.size} aula(s) neste período")
+    if (classroom == null) Panel { Text("Crie ou restaure uma turma para consultar seus planos.", color = ink) }
+    else if (lessons.isEmpty()) Panel { Text(if (view == "Arquivados") "Nenhum plano arquivado nesta turma." else "Nenhum plano neste período. Use o botão abaixo para planejar sua próxima aula.", color = ink) }
     lessons.forEach { lesson ->
         Panel {
-            Text("${lesson.time} • ${lesson.subject}", fontSize = 13.sp, color = blue, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text(lesson.title, fontSize = 19.sp, color = ink, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(9.dp))
-            Text("Objetivo: ${lesson.objective}", fontSize = 14.sp, color = ink)
-            if (lesson.content.isNotEmpty()) Text("Conteúdo: ${lesson.content}", fontSize = 13.sp, color = ink)
-            if (lesson.method.isNotEmpty()) Text("Metodologia: ${lesson.method}", fontSize = 13.sp, color = ink)
+  Text("${lesson.date} • ${lesson.time} • ${lesson.subject}", fontSize = 13.sp, color = blue, fontWeight = FontWeight.Bold)
+  Spacer(Modifier.height(6.dp))
+  Text(lesson.title, fontSize = 19.sp, color = ink, fontWeight = FontWeight.Black)
+  Spacer(Modifier.height(9.dp))
+  Text("Objetivo: ${lesson.objective}", fontSize = 14.sp, color = ink)
+  if (lesson.content.isNotEmpty()) Text("Conteúdo: ${lesson.content}", fontSize = 13.sp, color = ink)
+  if (lesson.method.isNotEmpty()) Text("Metodologia: ${lesson.method}", fontSize = 13.sp, color = ink)
+  Spacer(Modifier.height(12.dp))
+  if (lesson.archived) PrimaryButton("Restaurar plano") { restoreLesson(lesson) }
+  else PrimaryButton("Abrir e editar plano") { openLesson(lesson.id) }
         }
         Spacer(Modifier.height(9.dp))
     }
     Spacer(Modifier.height(12.dp))
-    if (classroom == null) Panel { Text("Crie ou restaure uma turma antes de cadastrar aulas.", color = ink) }
-    else PrimaryButton("+ Adicionar aula") { go("newLesson") }
+    if (classroom != null && view != "Arquivados") PrimaryButton("+ Adicionar aula") { go("newLesson") }
 }
 
-@Composable private fun LessonForm(classroom: Classroom, initialDay: String, back: () -> Unit, save: (String, String, String, String, String, String, String) -> Unit) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var subject by rememberSaveable { mutableStateOf("") }
-    var day by rememberSaveable { mutableStateOf(initialDay) }
-    var time by rememberSaveable { mutableStateOf("08:00") }
-    var objective by rememberSaveable { mutableStateOf("") }
-    var content by rememberSaveable { mutableStateOf("") }
-    var method by rememberSaveable { mutableStateOf("") }
-    Heading("Novo plano de aula", classroom.name, back)
+@Composable private fun LessonForm(classroom: Classroom, initialDay: String, back: () -> Unit,
+    save: (String, String, String, String, String, String, String) -> Unit,
+    initial: Lesson? = null, archive: (() -> Unit)? = null) {
+    var title by rememberSaveable(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
+    var subject by rememberSaveable(initial?.id) { mutableStateOf(initial?.subject.orEmpty()) }
+    var day by rememberSaveable(initial?.id) { mutableStateOf(initial?.date ?: initialDay) }
+    var time by rememberSaveable(initial?.id) { mutableStateOf(initial?.time ?: "08:00") }
+    var objective by rememberSaveable(initial?.id) { mutableStateOf(initial?.objective.orEmpty()) }
+    var content by rememberSaveable(initial?.id) { mutableStateOf(initial?.content.orEmpty()) }
+    var method by rememberSaveable(initial?.id) { mutableStateOf(initial?.method.orEmpty()) }
+    var confirmArchive by remember { mutableStateOf(false) }
+    Heading(if (initial == null) "Novo plano de aula" else "Editar plano de aula", classroom.name, back)
     Panel {
         Input("Título da aula", title, { title = it })
         Input("Disciplina / componente curricular", subject, { subject = it })
@@ -663,8 +710,19 @@ fun TeacherApp(store: TeacherStore) {
         Input("Objetivo da aula", objective, { objective = it }, multiline = true)
         Input("Conteúdo / objeto de conhecimento", content, { content = it }, multiline = true)
         Input("Metodologia", method, { method = it }, multiline = true)
-        PrimaryButton("Salvar plano de aula") { save(title, subject, day, time, objective, content, method) }
+        PrimaryButton(if (initial == null) "Salvar plano de aula" else "Salvar alterações") { save(title, subject, day, time, objective, content, method) }
+        if (archive != null) {
+  Spacer(Modifier.height(12.dp))
+  PrimaryButton("Arquivar plano", secondary = true) { confirmArchive = true }
+        }
     }
+    if (confirmArchive && archive != null) AlertDialog(
+        onDismissRequest = { confirmArchive = false },
+        title = { Text("Arquivar plano?") },
+        text = { Text("O plano será preservado e poderá ser restaurado em Planejamento > Arquivados.") },
+        confirmButton = { TextButton(onClick = { confirmArchive = false; archive() }) { Text("Arquivar") } },
+        dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancelar") } }
+    )
 }
 
 @Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit, add: () -> Unit, open: (Long) -> Unit) {
