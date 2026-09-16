@@ -1,0 +1,267 @@
+name: One-shot classroom and student CRUD
+on:
+  push:
+    branches: [feat/1-android-bootstrap]
+    paths: [.github/workflows/one-shot-classroom-crud.yml]
+permissions:
+  contents: write
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/1-android-bootstrap
+          persist-credentials: true
+      - name: Apply guarded product code changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          store_path = Path('app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt')
+          ui_path = Path('app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt')
+          store = store_path.read_text()
+          ui = ui_path.read_text()
+          def change(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'Guard failed for {label}: expected exactly one match, found {count}')
+              return text.replace(old, new, 1)
+          store = change(store,
+              'data class Classroom(val id: Long, val name: String, val stage: String, val shift: String)',
+              'data class Classroom(val id: Long, val name: String, val stage: String, val shift: String, val archived: Boolean = false)', 'class model')
+          store = change(store,
+              '"pedagogico.db", null, 1)', '"pedagogico.db", null, 2)', 'database version')
+          store = change(store,
+              'shift TEXT NOT NULL)"',
+              'shift TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)"', 'class schema')
+          store = change(store,
+              '''        // Never drop user tables or silently reset a teacher's records on upgrade.
+        error("Database migration from $oldVersion to $newVersion must be implemented before release")''',
+              '''        // Preserve all user data: archived is the only schema change from v1 to v2.
+        if (oldVersion == 1 && newVersion == 2) {
+            db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        } else {
+            error("Unsupported database migration from $oldVersion to $newVersion")
+        }''', 'migration')
+          store = change(store,
+              'SELECT id,name,stage,shift FROM classrooms ORDER BY id DESC',
+              'SELECT id,name,stage,shift,archived FROM classrooms ORDER BY id DESC', 'class read query')
+          store = change(store,
+              'Classroom(c.getLong(0), c.getString(1), c.getString(2), c.getString(3))',
+              'Classroom(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4) == 1)', 'class read mapping')
+          store = change(store,
+              'SELECT COUNT(*) FROM classrooms',
+              'SELECT COUNT(*) FROM classrooms WHERE archived=0', 'free active class limit')
+          store = change(store,
+              '''    fun addStudent(classroomId: Long, name: String) {''',
+              '''    fun updateClass(classroomId: Long, name: String, stage: String, shift: String) {
+        require(name.trim().isNotEmpty()) { "Informe o nome da turma." }
+        require(stage in listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")) { "Selecione a etapa de ensino." }
+        val changed = writableDatabase.update("classrooms", values("name" to name.trim(), "stage" to stage, "shift" to shift), "id=? AND archived=0", arrayOf(classroomId.toString()))
+        require(changed == 1) { "Turma não encontrada ou arquivada." }
+    }
+
+    fun setClassArchived(classroomId: Long, archived: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.rawQuery("SELECT archived FROM classrooms WHERE id=?", arrayOf(classroomId.toString())).use { c ->
+                require(c.moveToFirst()) { "Turma não encontrada." }
+                if ((c.getInt(0) == 1) == archived) {
+                    db.setTransactionSuccessful()
+                    return
+                }
+            }
+            if (!archived) {
+                db.rawQuery("SELECT COUNT(*) FROM classrooms WHERE archived=0", null).use { c ->
+                    c.moveToFirst()
+                    require(c.getInt(0) < 2) { "O plano gratuito permite até 2 turmas ativas. Arquive outra turma para restaurar esta." }
+                }
+            }
+            require(db.update("classrooms", values("archived" to archived), "id=?", arrayOf(classroomId.toString())) == 1)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun updateStudent(classroomId: Long, studentId: Long, name: String) {
+        require(name.trim().length >= 2) { "Informe o nome do aluno." }
+        val changed = writableDatabase.update("students", values("name" to name.trim()), "id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString()))
+        require(changed == 1) { "Aluno não encontrado nesta turma." }
+    }
+
+    fun deleteStudent(classroomId: Long, studentId: Long) {
+        val removed = writableDatabase.delete("students", "id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString()))
+        require(removed == 1) { "Aluno não encontrado nesta turma." }
+    }
+
+    fun addStudent(classroomId: Long, name: String) {''', 'class and student mutations')
+          ui = change(ui,
+              '''    var selectedClass by rememberSaveable { mutableLongStateOf(-1L) }''',
+              '''    var selectedClass by rememberSaveable { mutableLongStateOf(-1L) }
+    var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }''', 'selected student')
+          ui = change(ui,
+              '''    val currentClass = snapshot.classrooms.firstOrNull { it.id == selectedClass } ?: snapshot.classrooms.firstOrNull()''',
+              '''    val currentClass = snapshot.classrooms.firstOrNull { it.id == selectedClass && !it.archived }
+        ?: snapshot.classrooms.firstOrNull { !it.archived }''', 'current active class')
+          ui = change(ui,
+              '''                    "classes" -> ClassesScreen(snapshot, currentClass, onPick = { selectedClass = it; screen = "classDetail" }, onAdd = { screen = "createClass" })''',
+              '''                    "classes" -> ClassesScreen(snapshot, currentClass,
+                        onPick = { selectedClass = it; screen = "classDetail" },
+                        onAdd = { screen = "createClass" },
+                        onRestore = { id -> commit("classes") { store.setClassArchived(id, false) } })''', 'class listing route')
+          ui = change(ui,
+              '''                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { screen = it })''',
+              '''                    "editClass" -> if (currentClass != null) ClassForm(
+                        onBack = { screen = "classDetail" },
+                        onSave = { name, stage, shift -> commit("classDetail") { store.updateClass(currentClass.id, name, stage, shift) } },
+                        initial = currentClass)
+                    "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
+                        back = { screen = "classDetail" },
+                        archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
+                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { screen = it },
+                        onStudent = { selectedStudent = it; screen = "editStudent" })
+                    "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
+                        it.id == selectedStudent && it.classroomId == currentClass.id
+                    }?.let { student -> StudentEditForm(student, currentClass,
+                        back = { screen = "classDetail" },
+                        save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
+                        delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } }) }''', 'class and student navigation')
+          ui = change(ui,
+              '''    if (snapshot.classrooms.isEmpty() && screen != "createClass") screen = "createClass"''',
+              '''    if (snapshot.classrooms.isEmpty() && screen != "createClass") screen = "createClass"''', 'first-run class handling guard')
+          ui = change(ui,
+              '''"createClass", "addStudent", "newLesson", "observation", "newAppointment", "profile"''',
+              '''"createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "profile"''', 'form bottom navigation')
+          ui = change(ui,
+              '''@Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var stage by rememberSaveable { mutableStateOf("Ensino Fundamental") }
+    var shift by rememberSaveable { mutableStateOf("Matutino") }
+    Heading("Vamos criar sua turma?", "Você poderá adicionar alunos depois.", onBack)''',
+              '''@Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit, initial: Classroom? = null) {
+    var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
+    var stage by rememberSaveable(initial?.id) { mutableStateOf(initial?.stage ?: "Ensino Fundamental") }
+    var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: "Matutino") }
+    Heading(if (initial == null) "Vamos criar sua turma?" else "Editar turma", if (initial == null) "Você poderá adicionar alunos depois." else "Atualize os dados da turma.", onBack)''', 'edit class form')
+          ui = change(ui,
+              '''        PrimaryButton("Criar turma →") { onSave(name, stage, shift) }''',
+              '''        PrimaryButton(if (initial == null) "Criar turma →" else "Salvar alterações") { onSave(name, stage, shift) }''', 'class form submit')
+          ui = change(ui,
+              '''@Composable private fun HomeScreen(data: TeacherSnapshot, classroom: Classroom?, go: (String) -> Unit, select: (Long) -> Unit) {
+    Heading("Olá, ${data.profile?.name?.substringBefore(' ') ?: "Professor(a)"}! 💙", "Que bom ter você aqui hoje")''',
+              '''@Composable private fun HomeScreen(data: TeacherSnapshot, classroom: Classroom?, go: (String) -> Unit, select: (Long) -> Unit) {
+    Heading("Olá, ${data.profile?.name?.substringBefore(' ') ?: "Professor(a)"}! 💙", "Que bom ter você aqui hoje")
+    if (classroom == null) {
+        Panel { Text("Nenhuma turma ativa. Crie uma turma ou restaure uma turma arquivada.", color = ink) }
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("Gerenciar turmas") { go("classes") }
+        return
+    }''', 'home no active class')
+          ui = change(ui,
+              '''    if (data.classrooms.size > 1) {
+        Text("Turma em foco", color = ink, fontWeight = FontWeight.Bold)
+        Choices(data.classrooms.map { it.name }, classroom?.name.orEmpty()) { label -> data.classrooms.firstOrNull { it.name == label }?.let { select(it.id) } }''',
+              '''    val activeClasses = data.classrooms.filterNot { it.archived }
+    if (activeClasses.size > 1) {
+        Text("Turma em foco", color = ink, fontWeight = FontWeight.Bold)
+        Choices(activeClasses.map { it.name }, classroom.name) { label -> activeClasses.firstOrNull { it.name == label }?.let { select(it.id) } }''', 'home class selector')
+          ui = change(ui,
+              '''@Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit) {
+    Heading("Suas turmas", "Organize suas classes e alunos")
+    data.classrooms.forEach { classroom ->
+        ActionTile("👥", classroom.name, "${classroom.stage} • ${data.students.count { it.classroomId == classroom.id }} alunos") { onPick(classroom.id) }
+    }
+    Spacer(Modifier.height(10.dp))
+    PrimaryButton("+ Nova turma") { onAdd() }
+    Spacer(Modifier.height(9.dp))
+    Text("O plano gratuito inclui até duas turmas. Alunos ilimitados em cada turma.", fontSize = 12.sp, color = ink.copy(alpha = .7f))
+}''',
+              '''@Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit, onRestore: (Long) -> Unit) {
+    Heading("Suas turmas", "Organize suas classes e alunos")
+    val active = data.classrooms.filterNot { it.archived }
+    if (active.isEmpty()) Panel { Text("Nenhuma turma ativa. Crie uma ou restaure uma arquivada.", color = ink) }
+    active.forEach { classroom ->
+        ActionTile("👥", classroom.name, "${classroom.stage} • ${data.students.count { it.classroomId == classroom.id }} alunos") { onPick(classroom.id) }
+    }
+    Spacer(Modifier.height(10.dp))
+    if (active.size < 2) PrimaryButton("+ Nova turma") { onAdd() }
+    else Panel { Text("Você atingiu o limite gratuito de 2 turmas ativas. Arquive uma turma antes de criar ou restaurar outra.", color = ink) }
+    Spacer(Modifier.height(9.dp))
+    Text("Até 2 turmas ativas no plano gratuito; alunos ilimitados. Arquivar preserva os registros.", fontSize = 12.sp, color = ink.copy(alpha = .7f))
+    val archived = data.classrooms.filter { it.archived }
+    if (archived.isNotEmpty()) {
+        Spacer(Modifier.height(20.dp))
+        Subtitle("Turmas arquivadas")
+        archived.forEach { classroom -> ActionTile("↩", classroom.name, "Restaurar turma e seus registros") { onRestore(classroom.id) } }
+    }
+}''', 'classes archive list')
+          ui = change(ui,
+              '''@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit) {''',
+              '''@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit) {''', 'class detail signature')
+          ui = change(ui,
+              '''    Subtitle("Sua turma")
+    ActionTile("👤", "Alunos", "Adicionar e consultar alunos") { go("addStudent") }''',
+              '''    Subtitle("Sua turma")
+    ActionTile("✎", "Editar turma", "Nome, etapa e turno") { go("editClass") }
+    ActionTile("👤", "Alunos", "Adicionar e consultar alunos") { go("addStudent") }''', 'edit class action')
+          ui = change(ui,
+              '''    students.forEach { student -> ActionTile("👤", student.name) { go("attendance") } }''',
+              '''    students.forEach { student -> ActionTile("👤", student.name, "Consultar e editar cadastro") { onStudent(student.id) } }''', 'student tap destination')
+          ui = change(ui,
+              '''        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable private fun StudentForm''',
+              '''        Spacer(Modifier.height(8.dp))
+    }
+    Spacer(Modifier.height(16.dp))
+    PrimaryButton("Arquivar turma", secondary = true) { go("archiveClass") }
+}
+
+@Composable private fun ArchiveClassScreen(classroom: Classroom, back: () -> Unit, archive: () -> Unit) {
+    Heading("Arquivar turma?", classroom.name, back)
+    Panel {
+        Text("Arquivar preserva alunos, frequências, observações e planos. A turma deixa de contar no limite de turmas ativas e poderá ser restaurada em Suas turmas.", color = ink)
+        Spacer(Modifier.height(14.dp))
+        PrimaryButton("Confirmar arquivamento") { archive() }
+        Spacer(Modifier.height(10.dp))
+        PrimaryButton("Cancelar", secondary = true) { back() }
+    }
+}
+
+@Composable private fun StudentEditForm(student: Student, classroom: Classroom, back: () -> Unit, save: (String) -> Unit, delete: () -> Unit) {
+    var name by rememberSaveable(student.id) { mutableStateOf(student.name) }
+    var confirming by remember { mutableStateOf(false) }
+    Heading("Editar aluno", classroom.name, back)
+    Panel {
+        Input("Nome completo do aluno", name, { name = it })
+        PrimaryButton("Salvar alterações") { save(name) }
+        Spacer(Modifier.height(14.dp))
+        PrimaryButton("Excluir aluno", secondary = true) { confirming = true }
+    }
+    if (confirming) AlertDialog(
+        onDismissRequest = { confirming = false },
+        title = { Text("Excluir este aluno?") },
+        text = { Text("A exclusão é permanente. As frequências deste aluno também serão apagadas, e observações vinculadas ficarão sem aluno identificado. Confirme apenas se tiver certeza.") },
+        confirmButton = { TextButton(onClick = { confirming = false; delete() }) { Text("Excluir definitivamente") } },
+        dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancelar") } }
+    )
+}
+
+@Composable private fun StudentForm''', 'archive and student editor')
+          store_path.write_text(store)
+          ui_path.write_text(ui)
+          print('Guarded CRUD patch applied to', store_path, 'and', ui_path)
+          PY
+      - name: Commit functional implementation and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/one-shot-classroom-crud.yml
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          git diff --cached --check
+          git commit -m 'feat: editable students and classrooms with reversible archive and data-safe SQLite v2 migration'
+          git push origin HEAD:feat/1-android-bootstrap
