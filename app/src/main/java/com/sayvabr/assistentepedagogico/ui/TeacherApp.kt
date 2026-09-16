@@ -31,13 +31,13 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val ink = Color(0xFF102A56)
-private val blue = Color(0xFF098EED)
-private val canvas = Color(0xFFEAF8FF)
-private val pale = Color(0xFFDDF4FF)
+private val ink = ApColors.Navy
+private val blue = ApColors.Primary
+private val canvas = ApColors.Sky
+private val pale = Color(0xFFEAF8FF)
 private val outline = Color(0xFFCDE8F8)
-private val green = Color(0xFF16865C)
-private val red = Color(0xFFB93653)
+private val green = ApColors.Pressed
+private val red = ApColors.Navy
 private val brDate = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))
 private fun friendlyDay(day: String) = LocalDate.parse(day).format(brDate).replaceFirstChar { it.uppercase() }
 private fun today() = LocalDate.now().toString()
@@ -168,9 +168,15 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 @Composable private fun PrimaryButton(label: String, secondary: Boolean = false, click: () -> Unit) {
-    Button(onClick = click, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(17.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = if (secondary) pale else blue, contentColor = if (secondary) ink else Color.White)) {
-        Text(label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+    Box(
+        Modifier.fillMaxWidth().height(58.dp)
+            .background(if (secondary) outline else ApColors.Pressed, RoundedCornerShape(18.dp))
+            .padding(bottom = 5.dp)
+    ) {
+        Button(onClick = click, modifier = Modifier.fillMaxSize(), shape = RoundedCornerShape(17.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = if (secondary) pale else blue, contentColor = if (secondary) ink else Color.White)) {
+            Text(label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+        }
     }
 }
 @Composable private fun Heading(title: String, subtitle: String? = null, back: (() -> Unit)? = null) {

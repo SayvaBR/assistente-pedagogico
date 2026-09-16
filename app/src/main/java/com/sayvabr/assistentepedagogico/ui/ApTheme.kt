@@ -11,12 +11,12 @@ object ApColors {
     val Navy = Color(0xFF102A56)
     val Sky = Color(0xFFDDF4FF)
     val White = Color(0xFFFFFFFF)
-    val Canvas = Color(0xFFF7F7FB)
+    val Canvas = Sky
 }
 
 private val apColorScheme = lightColorScheme(
     primary = ApColors.Primary,
-    onPrimary = ApColors.Navy,
+    onPrimary = ApColors.White,
     background = ApColors.Canvas,
     onBackground = ApColors.Navy,
     surface = ApColors.White,
