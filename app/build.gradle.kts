@@ -17,6 +17,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // The explicitly requested review build installs alongside prior builds.
+            // It has its OWN sandbox; no migration or student data is copied from another app.
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
