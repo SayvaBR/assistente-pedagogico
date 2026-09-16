@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'app/**'
+      - 'tools/capture_android_screens.py'
       - '.github/workflows/visual.yml'
 permissions:
   contents: read
@@ -30,7 +31,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Build, install, launch and capture real Android screen
+      - name: Build, install, launch and capture running Android screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -43,15 +44,11 @@ jobs:
             gradle --no-daemon :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n com.sayvabr.assistentepedagogico/.MainActivity
-            sleep 5
-            mkdir -p visual-evidence
-            adb shell screencap -p /sdcard/ap-m0.png
-            adb pull /sdcard/ap-m0.png visual-evidence/ap-m0-android.png
-            test -s visual-evidence/ap-m0-android.png
-      - name: Upload screenshot for design review
-        if: success()
+            python3 tools/capture_android_screens.py
+      - name: Upload REAL screenshots (including partial evidence if an interaction fails)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ap-m0-android-screenshot
-          path: visual-evidence/ap-m0-android.png
-          if-no-files-found: error
+          name: ap-android-real-screenshots
+          path: visual-evidence/*.png
+          if-no-files-found: warn
