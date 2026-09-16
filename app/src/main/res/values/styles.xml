@@ -2,8 +2,8 @@
 <resources>
     <style name="Theme.AssistentePedagogico" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:statusBarColor">#DDF4FF</item>
-        <item name="android:navigationBarColor">#DDF4FF</item>
+        <!-- Dark blue navigation bar maintains contrast with white system icons on API 26+. -->
+        <item name="android:navigationBarColor">#0B4777</item>
     </style>
 </resources>
