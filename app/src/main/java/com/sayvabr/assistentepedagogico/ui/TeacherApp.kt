@@ -198,7 +198,12 @@ fun TeacherApp(store: TeacherStore) {
               save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
               delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } }) }
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { back() }, { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } })
-                    "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
+                    "attendanceHistory" -> if (currentClass != null) AttendanceHistoryScreen(
+              snapshot, currentClass, back = { back() },
+              openDay = { day -> selectedDay = day; navigate("attendance") },
+              startAttendance = { selectedDay = today(); navigate("attendance") }
+          )
+          "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onAddStudent = { navigate("addStudent") }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull { it.id == selectedObservation && it.classroomId == currentClass.id }?.let { observation ->
                         ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share ->
@@ -503,6 +508,7 @@ fun TeacherApp(store: TeacherStore) {
     ActionTile("✎", "Editar turma", "Nome, etapa e turno") { go("editClass") }
     ActionTile("👤", "Alunos", "Adicionar e consultar alunos") { go("addStudent") }
     ActionTile("✓", "Frequência", "Registrar presenças e faltas") { go("attendance") }
+    ActionTile("▦", "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
     ActionTile("📝", "Registros", "Nova observação pedagógica") { go("observation") }
     Spacer(Modifier.height(17.dp))
     Subtitle("Alunos")
@@ -574,7 +580,7 @@ fun TeacherApp(store: TeacherStore) {
     Spacer(Modifier.height(15.dp))
 }
 
-@Composable private fun AttendanceEditor(data: TeacherSnapshot, classroom: Classroom, day: String, onDay: (String) -> Unit, onBack: () -> Unit, onSave: (Map<Long, String>) -> Unit) {
+@Composable private fun AttendanceEditor(data: TeacherSnapshot, classroom: Classroom, day: String, onDay: (String) -> Unit, onBack: () -> Unit, onAddStudent: () -> Unit, onSave: (Map<Long, String>) -> Unit) {
     val students = data.students.filter { it.classroomId == classroom.id }
     val draft = remember(classroom.id, day, data.attendance) {
         mutableStateMapOf<Long, String>().apply {
@@ -596,7 +602,7 @@ fun TeacherApp(store: TeacherStore) {
     Spacer(Modifier.height(16.dp))
     if (students.isEmpty()) {
         Panel { Text("Cadastre alunos nesta turma antes de fazer a chamada.", color = ink) }
-        Spacer(Modifier.height(12.dp)); PrimaryButton("Adicionar alunos", click = onBack)
+        Spacer(Modifier.height(12.dp)); PrimaryButton("Adicionar alunos", click = onAddStudent)
     } else {
         students.forEach { student ->
             Panel {
