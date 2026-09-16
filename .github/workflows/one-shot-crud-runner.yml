@@ -1,0 +1,41 @@
+name: Guarded CRUD implementation runner
+on:
+  push:
+    branches:
+      - feat/1-android-bootstrap
+    paths:
+      - .github/workflows/one-shot-crud-runner.yml
+  pull_request:
+    paths:
+      - .github/workflows/one-shot-crud-runner.yml
+permissions:
+  contents: write
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/1-android-bootstrap
+          persist-credentials: true
+      - name: Execute guarded code patch preserved in prior workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          raw = Path('.github/workflows/one-shot-classroom-crud.yml').read_text()
+          source = raw.split("python3 - <<'PY'" + chr(10), 1)[1].split(chr(10) + '          PY', 1)[0]
+          script = chr(10).join(line[10:] if line.startswith(' ' * 10) else line for line in source.splitlines())
+          compile(script, 'guarded_crud_patch.py', 'exec')
+          exec(script)
+          PY
+      - name: Commit source changes and clean up temporary workflows
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/one-shot-classroom-crud.yml .github/workflows/one-shot-crud-runner.yml
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          git diff --cached --check
+          git commit -m 'feat: editable classes and students, reversible archive, data-preserving schema migration'
+          git push origin HEAD:feat/1-android-bootstrap
