@@ -51,6 +51,7 @@ fun TeacherApp(store: TeacherStore) {
     var screen by rememberSaveable { mutableStateOf("home") }
     var tab by rememberSaveable { mutableStateOf("Início") }
     var selectedClass by rememberSaveable { mutableLongStateOf(-1L) }
+    var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -98,7 +99,8 @@ fun TeacherApp(store: TeacherStore) {
         }
         return
     }
-    val currentClass = snapshot.classrooms.firstOrNull { it.id == selectedClass } ?: snapshot.classrooms.firstOrNull()
+    val currentClass = snapshot.classrooms.firstOrNull { it.id == selectedClass && !it.archived }
+        ?: snapshot.classrooms.firstOrNull { !it.archived }
     if (snapshot.profile == null) {
         FirstRun(onFinish = { name -> commit("createClass") { store.saveProfile(name) } })
         if (busy) SavingOverlay()
@@ -113,9 +115,26 @@ fun TeacherApp(store: TeacherStore) {
                 Spacer(Modifier.height(18.dp))
                 when (screen) {
                     "home" -> HomeScreen(snapshot, currentClass, { screen = it }, { selectedClass = it })
-                    "classes" -> ClassesScreen(snapshot, currentClass, onPick = { selectedClass = it; screen = "classDetail" }, onAdd = { screen = "createClass" })
+                    "classes" -> ClassesScreen(snapshot, currentClass,
+              onPick = { selectedClass = it; screen = "classDetail" },
+              onAdd = { screen = "createClass" },
+              onRestore = { id -> commit("classes") { store.setClassArchived(id, false) } })
                     "createClass" -> ClassForm(onBack = { screen = if (snapshot.classrooms.isEmpty()) "createClass" else "classes" }, onSave = { name, stage, shift -> commit("classes") { store.createClass(name, stage, shift) } })
-                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { screen = it })
+                    "editClass" -> if (currentClass != null) ClassForm(
+              onBack = { screen = "classDetail" },
+              onSave = { name, stage, shift -> commit("classDetail") { store.updateClass(currentClass.id, name, stage, shift) } },
+              initial = currentClass)
+          "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
+              back = { screen = "classDetail" },
+              archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
+          "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { screen = it },
+              onStudent = { selectedStudent = it; screen = "editStudent" })
+          "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
+              it.id == selectedStudent && it.classroomId == currentClass.id
+          }?.let { student -> StudentEditForm(student, currentClass,
+              back = { screen = "classDetail" },
+              save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
+              delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } }) }
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { screen = "classDetail" }, { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } })
                     "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { screen = "classDetail" }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { screen = "classDetail" }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
@@ -134,7 +153,7 @@ fun TeacherApp(store: TeacherStore) {
                 Spacer(Modifier.height(24.dp))
             }
         }
-        if (snapshot.classrooms.isNotEmpty() && screen !in listOf("createClass", "addStudent", "newLesson", "observation", "newAppointment", "profile")) {
+        if (snapshot.classrooms.isNotEmpty() && screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "observation", "newAppointment", "profile")) {
             BottomBar(tab) { destination -> tab = destination; screen = when (destination) { "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more" } }
         }
     }
@@ -280,11 +299,11 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var stage by rememberSaveable { mutableStateOf("Ensino Fundamental") }
-    var shift by rememberSaveable { mutableStateOf("Matutino") }
-    Heading("Vamos criar sua turma?", "Você poderá adicionar alunos depois.", onBack)
+@Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit, initial: Classroom? = null) {
+    var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
+    var stage by rememberSaveable(initial?.id) { mutableStateOf(initial?.stage ?: "Ensino Fundamental") }
+    var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: "Matutino") }
+    Heading(if (initial == null) "Vamos criar sua turma?" else "Editar turma", if (initial == null) "Você poderá adicionar alunos depois." else "Atualize os dados da turma.", onBack)
     Panel {
         Input("Nome da turma (ex.: 5º Ano A)", name, { name = it })
         Text("Etapa de ensino", color = ink, fontWeight = FontWeight.Bold)
@@ -294,15 +313,22 @@ fun TeacherApp(store: TeacherStore) {
         Spacer(Modifier.height(8.dp))
         Choices(listOf("Matutino", "Vespertino", "Noturno"), shift) { shift = it }
         Spacer(Modifier.height(10.dp))
-        PrimaryButton("Criar turma →") { onSave(name, stage, shift) }
+        PrimaryButton(if (initial == null) "Criar turma →" else "Salvar alterações") { onSave(name, stage, shift) }
     }
 }
 
 @Composable private fun HomeScreen(data: TeacherSnapshot, classroom: Classroom?, go: (String) -> Unit, select: (Long) -> Unit) {
     Heading("Olá, ${data.profile?.name?.substringBefore(' ') ?: "Professor(a)"}! 💙", "Que bom ter você aqui hoje")
-    if (data.classrooms.size > 1) {
+    if (classroom == null) {
+        Panel { Text("Nenhuma turma ativa. Crie uma turma ou restaure uma turma arquivada.", color = ink) }
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton("Gerenciar turmas") { go("classes") }
+        return
+    }
+    val activeClasses = data.classrooms.filterNot { it.archived }
+    if (activeClasses.size > 1) {
         Text("Turma em foco", color = ink, fontWeight = FontWeight.Bold)
-        Choices(data.classrooms.map { it.name }, classroom?.name.orEmpty()) { label -> data.classrooms.firstOrNull { it.name == label }?.let { select(it.id) } }
+        Choices(activeClasses.map { it.name }, classroom.name) { label -> activeClasses.firstOrNull { it.name == label }?.let { select(it.id) } }
     }
     val todayLesson = data.lessons.firstOrNull { it.date == today() && it.classroomId == classroom?.id }
     Surface(shape = RoundedCornerShape(25.dp), color = blue, modifier = Modifier.fillMaxWidth()) {
@@ -333,20 +359,30 @@ fun TeacherApp(store: TeacherStore) {
     if (data.observations.isEmpty()) Panel { Text("Os registros que você criar aparecerão aqui.", color = ink) }
 }
 
-@Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit) {
+@Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit, onRestore: (Long) -> Unit) {
     Heading("Suas turmas", "Organize suas classes e alunos")
-    data.classrooms.forEach { classroom ->
+    val active = data.classrooms.filterNot { it.archived }
+    if (active.isEmpty()) Panel { Text("Nenhuma turma ativa. Crie uma ou restaure uma arquivada.", color = ink) }
+    active.forEach { classroom ->
         ActionTile("👥", classroom.name, "${classroom.stage} • ${data.students.count { it.classroomId == classroom.id }} alunos") { onPick(classroom.id) }
     }
     Spacer(Modifier.height(10.dp))
-    PrimaryButton("+ Nova turma") { onAdd() }
+    if (active.size < 2) PrimaryButton("+ Nova turma") { onAdd() }
+    else Panel { Text("Você atingiu o limite gratuito de 2 turmas ativas. Arquive uma turma antes de criar ou restaurar outra.", color = ink) }
     Spacer(Modifier.height(9.dp))
-    Text("O plano gratuito inclui até duas turmas. Alunos ilimitados em cada turma.", fontSize = 12.sp, color = ink.copy(alpha = .7f))
+    Text("Até 2 turmas ativas no plano gratuito; alunos ilimitados. Arquivar preserva os registros.", fontSize = 12.sp, color = ink.copy(alpha = .7f))
+    val archived = data.classrooms.filter { it.archived }
+    if (archived.isNotEmpty()) {
+        Spacer(Modifier.height(20.dp))
+        Subtitle("Turmas arquivadas")
+        archived.forEach { classroom -> ActionTile("↩", classroom.name, "Restaurar turma e seus registros") { onRestore(classroom.id) } }
+    }
 }
 
-@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit) {
+@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit) {
     Heading(classroom.name, "${data.students.count { it.classroomId == classroom.id }} alunos • ${classroom.stage}", { go("classes") })
     Subtitle("Sua turma")
+    ActionTile("✎", "Editar turma", "Nome, etapa e turno") { go("editClass") }
     ActionTile("👤", "Alunos", "Adicionar e consultar alunos") { go("addStudent") }
     ActionTile("✓", "Frequência", "Registrar presenças e faltas") { go("attendance") }
     ActionTile("📝", "Registros", "Nova observação pedagógica") { go("observation") }
@@ -354,7 +390,7 @@ fun TeacherApp(store: TeacherStore) {
     Subtitle("Alunos")
     val students = data.students.filter { it.classroomId == classroom.id }
     if (students.isEmpty()) Panel { Text("Esta turma ainda não tem alunos.", color = ink); Spacer(Modifier.height(9.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") } }
-    students.forEach { student -> ActionTile("👤", student.name) { go("attendance") } }
+    students.forEach { student -> ActionTile("👤", student.name, "Consultar e editar cadastro") { onStudent(student.id) } }
     Spacer(Modifier.height(14.dp))
     Subtitle("Registros recentes")
     data.observations.filter { it.classroomId == classroom.id }.take(5).forEach { note ->
@@ -365,6 +401,38 @@ fun TeacherApp(store: TeacherStore) {
         }
         Spacer(Modifier.height(8.dp))
     }
+    Spacer(Modifier.height(16.dp))
+    PrimaryButton("Arquivar turma", secondary = true) { go("archiveClass") }
+}
+
+@Composable private fun ArchiveClassScreen(classroom: Classroom, back: () -> Unit, archive: () -> Unit) {
+    Heading("Arquivar turma?", classroom.name, back)
+    Panel {
+        Text("Arquivar preserva alunos, frequências, observações e planos. A turma deixa de contar no limite de turmas ativas e poderá ser restaurada em Suas turmas.", color = ink)
+        Spacer(Modifier.height(14.dp))
+        PrimaryButton("Confirmar arquivamento") { archive() }
+        Spacer(Modifier.height(10.dp))
+        PrimaryButton("Cancelar", secondary = true) { back() }
+    }
+}
+
+@Composable private fun StudentEditForm(student: Student, classroom: Classroom, back: () -> Unit, save: (String) -> Unit, delete: () -> Unit) {
+    var name by rememberSaveable(student.id) { mutableStateOf(student.name) }
+    var confirming by remember { mutableStateOf(false) }
+    Heading("Editar aluno", classroom.name, back)
+    Panel {
+        Input("Nome completo do aluno", name, { name = it })
+        PrimaryButton("Salvar alterações") { save(name) }
+        Spacer(Modifier.height(14.dp))
+        PrimaryButton("Excluir aluno", secondary = true) { confirming = true }
+    }
+    if (confirming) AlertDialog(
+        onDismissRequest = { confirming = false },
+        title = { Text("Excluir este aluno?") },
+        text = { Text("A exclusão é permanente. As frequências deste aluno também serão apagadas, e observações vinculadas ficarão sem aluno identificado. Confirme apenas se tiver certeza.") },
+        confirmButton = { TextButton(onClick = { confirming = false; delete() }) { Text("Excluir definitivamente") } },
+        dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancelar") } }
+    )
 }
 
 @Composable private fun StudentForm(classroom: Classroom, back: () -> Unit, save: (String) -> Unit) {

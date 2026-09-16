@@ -8,7 +8,7 @@ import java.time.LocalDate
 
 /** All records stay in the app's private SQLite database. Android automatic backup is disabled. */
 data class TeacherProfile(val name: String)
-data class Classroom(val id: Long, val name: String, val stage: String, val shift: String)
+data class Classroom(val id: Long, val name: String, val stage: String, val shift: String, val archived: Boolean = false)
 data class Student(val id: Long, val classroomId: Long, val name: String)
 data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String)
 data class Attendance(val classroomId: Long, val studentId: Long, val date: String, val status: String)
@@ -26,13 +26,13 @@ data class TeacherSnapshot(
     val files: List<SavedFile>,
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, 1) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, 2) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
         listOf(
             "CREATE TABLE profile (id INTEGER PRIMARY KEY CHECK(id=1), name TEXT NOT NULL)",
-            "CREATE TABLE classrooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, stage TEXT NOT NULL, shift TEXT NOT NULL)",
+            "CREATE TABLE classrooms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, stage TEXT NOT NULL, shift TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
             "CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, name TEXT NOT NULL)",
             "CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, title TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL, objective TEXT NOT NULL, content TEXT NOT NULL, method TEXT NOT NULL)",
             "CREATE TABLE attendance (classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, day TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('P','F')), PRIMARY KEY(student_id,day))",
@@ -43,8 +43,12 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Never drop user tables or silently reset a teacher's records on upgrade.
-        error("Database migration from $oldVersion to $newVersion must be implemented before release")
+        // Preserve all user data: archived is the only schema change from v1 to v2.
+        if (oldVersion == 1 && newVersion == 2) {
+  db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        } else {
+  error("Unsupported database migration from $oldVersion to $newVersion")
+        }
     }
 
     fun read(): TeacherSnapshot {
@@ -52,7 +56,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         var profile: TeacherProfile? = null
         db.rawQuery("SELECT name FROM profile WHERE id=1", null).use { c -> if (c.moveToFirst()) profile = TeacherProfile(c.getString(0)) }
         val classrooms = mutableListOf<Classroom>()
-        db.rawQuery("SELECT id,name,stage,shift FROM classrooms ORDER BY id DESC", null).use { c -> while (c.moveToNext()) classrooms += Classroom(c.getLong(0), c.getString(1), c.getString(2), c.getString(3)) }
+        db.rawQuery("SELECT id,name,stage,shift,archived FROM classrooms ORDER BY id DESC", null).use { c -> while (c.moveToNext()) classrooms += Classroom(c.getLong(0), c.getString(1), c.getString(2), c.getString(3), c.getInt(4) == 1) }
         val students = mutableListOf<Student>()
         db.rawQuery("SELECT id,classroom_id,name FROM students ORDER BY name COLLATE NOCASE", null).use { c -> while (c.moveToNext()) students += Student(c.getLong(0), c.getLong(1), c.getString(2)) }
         val lessons = mutableListOf<Lesson>()
@@ -89,11 +93,51 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         val db = writableDatabase
         db.beginTransaction()
         return try {
-            db.rawQuery("SELECT COUNT(*) FROM classrooms", null).use { c -> c.moveToFirst(); require(c.getInt(0) < 2) { "O plano gratuito permite 2 turmas. Seus dados continuam preservados." } }
+            db.rawQuery("SELECT COUNT(*) FROM classrooms WHERE archived=0", null).use { c -> c.moveToFirst(); require(c.getInt(0) < 2) { "O plano gratuito permite 2 turmas. Seus dados continuam preservados." } }
             val id = db.insertOrThrow("classrooms", null, values("name" to name.trim(), "stage" to stage, "shift" to shift))
             db.setTransactionSuccessful()
             id
         } finally { db.endTransaction() }
+    }
+
+    fun updateClass(classroomId: Long, name: String, stage: String, shift: String) {
+        require(name.trim().isNotEmpty()) { "Informe o nome da turma." }
+        require(stage in listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")) { "Selecione a etapa de ensino." }
+        val changed = writableDatabase.update("classrooms", values("name" to name.trim(), "stage" to stage, "shift" to shift), "id=? AND archived=0", arrayOf(classroomId.toString()))
+        require(changed == 1) { "Turma não encontrada ou arquivada." }
+    }
+
+    fun setClassArchived(classroomId: Long, archived: Boolean) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+  db.rawQuery("SELECT archived FROM classrooms WHERE id=?", arrayOf(classroomId.toString())).use { c ->
+      require(c.moveToFirst()) { "Turma não encontrada." }
+      if ((c.getInt(0) == 1) == archived) {
+          db.setTransactionSuccessful()
+          return
+      }
+  }
+  if (!archived) {
+      db.rawQuery("SELECT COUNT(*) FROM classrooms WHERE archived=0", null).use { c ->
+          c.moveToFirst()
+          require(c.getInt(0) < 2) { "O plano gratuito permite até 2 turmas ativas. Arquive outra turma para restaurar esta." }
+      }
+  }
+  require(db.update("classrooms", values("archived" to archived), "id=?", arrayOf(classroomId.toString())) == 1)
+  db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun updateStudent(classroomId: Long, studentId: Long, name: String) {
+        require(name.trim().length >= 2) { "Informe o nome do aluno." }
+        val changed = writableDatabase.update("students", values("name" to name.trim()), "id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString()))
+        require(changed == 1) { "Aluno não encontrado nesta turma." }
+    }
+
+    fun deleteStudent(classroomId: Long, studentId: Long) {
+        val removed = writableDatabase.delete("students", "id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString()))
+        require(removed == 1) { "Aluno não encontrado nesta turma." }
     }
 
     fun addStudent(classroomId: Long, name: String) {
