@@ -157,7 +157,7 @@ fun TeacherApp(store: TeacherStore) {
         Panel {
             Text("Não foi possível concluir", fontWeight = FontWeight.Black, color = ink, fontSize = 21.sp)
             Spacer(Modifier.height(8.dp)); Text(message, color = red)
-            Spacer(Modifier.height(18.dp)); PrimaryButton("Entendi", dismiss)
+            Spacer(Modifier.height(18.dp)); PrimaryButton("Entendi", click = dismiss)
         }
     }
 }
@@ -167,7 +167,7 @@ fun TeacherApp(store: TeacherStore) {
         Column(Modifier.padding(17.dp), content = content)
     }
 }
-@Composable private fun PrimaryButton(label: String, click: () -> Unit, secondary: Boolean = false) {
+@Composable private fun PrimaryButton(label: String, secondary: Boolean = false, click: () -> Unit) {
     Button(onClick = click, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(17.dp),
         colors = ButtonDefaults.buttonColors(containerColor = if (secondary) pale else blue, contentColor = if (secondary) ink else Color.White)) {
         Text(label, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
@@ -205,8 +205,8 @@ fun TeacherApp(store: TeacherStore) {
         Spacer(Modifier.height(8.dp))
     }
 }
-@Composable private fun NavItem(label: String, symbol: String, selected: Boolean, click: () -> Unit) {
-    Column(Modifier.weight(1f).clickable(onClick = click).padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+@Composable private fun NavItem(label: String, symbol: String, selected: Boolean, modifier: Modifier, click: () -> Unit) {
+    Column(modifier.clickable(onClick = click).padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(symbol, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (selected) blue else ink.copy(alpha = .5f))
         Text(label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Black else FontWeight.Medium, color = if (selected) blue else ink.copy(alpha = .7f), maxLines = 1)
     }
@@ -215,7 +215,7 @@ fun TeacherApp(store: TeacherStore) {
     Surface(color = Color.White, shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp), border = BorderStroke(1.dp, outline)) {
         Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             listOf("Início" to "⌂", "Planejamento" to "▦", "Turmas" to "♧", "Arquivos" to "▱", "Mais" to "•••").forEach { (label, icon) ->
-                NavItem(label, icon, selected == label) { pick(label) }
+                NavItem(label, icon, selected == label, Modifier.weight(1f)) { pick(label) }
             }
         }
     }
@@ -400,7 +400,7 @@ fun TeacherApp(store: TeacherStore) {
     Spacer(Modifier.height(16.dp))
     if (students.isEmpty()) {
         Panel { Text("Cadastre alunos nesta turma antes de fazer a chamada.", color = ink) }
-        Spacer(Modifier.height(12.dp)); PrimaryButton("Adicionar alunos", onBack)
+        Spacer(Modifier.height(12.dp)); PrimaryButton("Adicionar alunos", click = onBack)
     } else {
         students.forEach { student ->
             Panel {
@@ -501,7 +501,7 @@ fun TeacherApp(store: TeacherStore) {
     if (events.isEmpty()) Panel { Text("Nenhum compromisso para esta data.", color = ink) }
     events.forEach { item -> ActionTile("⏰", item.title, item.time) {} }
     Spacer(Modifier.height(12.dp))
-    PrimaryButton("+ Novo compromisso", add)
+    PrimaryButton("+ Novo compromisso", click = add)
 }
 
 @Composable private fun AppointmentForm(initialDay: String, back: () -> Unit, save: (String, String, String) -> Unit) {
@@ -519,7 +519,7 @@ fun TeacherApp(store: TeacherStore) {
 
 @Composable private fun FilesScreen(data: TeacherSnapshot, import: () -> Unit, open: (SavedFile) -> Unit) {
     Heading("Arquivos", "Seus materiais organizados em um só lugar")
-    PrimaryButton("+ Importar arquivo", import)
+    PrimaryButton("+ Importar arquivo", click = import)
     Spacer(Modifier.height(23.dp))
     Subtitle("Arquivos recentes")
     if (data.files.isEmpty()) Panel { Text("Nenhum arquivo por aqui ainda. Importe um documento do seu aparelho para começar.", color = ink) }
