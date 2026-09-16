@@ -126,6 +126,32 @@ class TeacherStoreInstrumentedTest {
         assertNull(saved.observations.single().studentId)
     }
 
+    @Test fun observationEditAndDeleteAreScopedAndPersist() {
+        val first = db()
+        val a = first.createClass("Turma Observação A", "Ensino Fundamental", "Matutino")
+        val b = first.createClass("Turma Observação B", "Ensino Fundamental", "Vespertino")
+        first.addStudent(a, "Iara")
+        first.addStudent(b, "João")
+        val iara = first.read().students.first { it.classroomId == a }.id
+        val joao = first.read().students.first { it.classroomId == b }.id
+        first.addObservation(a, iara, "Participação", "Registro original da aluna.", false)
+        val note = first.read().observations.single()
+        rejects { first.updateObservation(b, note.id, joao, "Aprendizagem", "Tentativa indevida.", true) }
+        rejects { first.updateObservation(a, note.id, joao, "Aprendizagem", "Aluno de outra turma.", true) }
+        first.updateObservation(a, note.id, null, "Aprendizagem", "Registro pedagógico revisado.", true)
+        var saved = reopen().read().observations.single()
+        assertEquals(note.id, saved.id)
+        assertNull(saved.studentId)
+        assertEquals("Aprendizagem", saved.kind)
+        assertEquals("Registro pedagógico revisado.", saved.body)
+        assertTrue(saved.shareApproved)
+        rejects { db().deleteObservation(b, note.id) }
+        assertEquals(1, reopen().read().observations.size)
+        db().deleteObservation(a, note.id)
+        assertTrue(reopen().read().observations.isEmpty())
+        rejects { db().deleteObservation(a, note.id) }
+    }
+
     @Test fun invalidAttendanceBatchRollsBackAllMarks() {
         val first = db()
         val classroomId = first.createClass("5º C", "Ensino Fundamental", "Matutino")

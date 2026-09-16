@@ -56,6 +56,7 @@ fun TeacherApp(store: TeacherStore) {
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
     var selectedAppointment by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedLesson by rememberSaveable { mutableLongStateOf(-1L) }
+    var selectedObservation by rememberSaveable { mutableLongStateOf(-1L) }
     var backStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     var confirmExit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -188,7 +189,8 @@ fun TeacherApp(store: TeacherStore) {
               back = { back() },
               archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
           "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { navigate(it) },
-              onStudent = { selectedStudent = it; navigate("editStudent") })
+              onStudent = { selectedStudent = it; navigate("editStudent") },
+              onObservation = { selectedObservation = it; navigate("editObservation") })
           "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
               it.id == selectedStudent && it.classroomId == currentClass.id
           }?.let { student -> StudentEditForm(student, currentClass,
@@ -198,6 +200,11 @@ fun TeacherApp(store: TeacherStore) {
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { back() }, { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } })
                     "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
+                    "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull { it.id == selectedObservation && it.classroomId == currentClass.id }?.let { observation ->
+                        ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share ->
+                            commit("classDetail") { store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share) }
+                        }, initial = observation, delete = { commit("classDetail") { store.deleteObservation(currentClass.id, observation.id) } })
+                    }
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) },
               openLesson = { lessonId -> selectedLesson = lessonId; navigate("editLesson") },
               restoreLesson = { lesson -> commit("planning") { store.setLessonArchived(lesson.classroomId, lesson.id, false) } })
@@ -243,7 +250,7 @@ fun TeacherApp(store: TeacherStore) {
                 Spacer(Modifier.height(24.dp))
             }
         }
-        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "editLesson", "observation", "newAppointment", "editAppointment", "profile")) {
+        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "editLesson", "observation", "editObservation", "newAppointment", "editAppointment", "profile")) {
             BottomBar(tab) { destination -> navigate(when (destination) { "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more" }, root = true) }
         }
     }
@@ -490,7 +497,7 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit) {
+@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit, onObservation: (Long) -> Unit) {
     Heading(classroom.name, "${data.students.count { it.classroomId == classroom.id }} alunos • ${classroom.stage}", { go("classes") })
     Subtitle("Sua turma")
     ActionTile("✎", "Editar turma", "Nome, etapa e turno") { go("editClass") }
@@ -505,10 +512,14 @@ fun TeacherApp(store: TeacherStore) {
     Spacer(Modifier.height(14.dp))
     Subtitle("Registros recentes")
     data.observations.filter { it.classroomId == classroom.id }.take(5).forEach { note ->
-        Panel {
-            Text("${note.kind} • ${note.date}", color = blue, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.height(7.dp))
-            Text(note.body, color = ink)
+        Surface(Modifier.fillMaxWidth().clickable { onObservation(note.id) }, shape = RoundedCornerShape(18.dp), color = Color.White, border = BorderStroke(1.dp, outline)) {
+            Column(Modifier.padding(15.dp)) {
+                Text("${note.kind} • ${note.date}", color = blue, fontWeight = FontWeight.ExtraBold)
+                Spacer(Modifier.height(7.dp))
+                Text(note.body, color = ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(7.dp))
+                Text("Toque para consultar ou editar", color = ink.copy(alpha = .65f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -602,12 +613,14 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun ObservationForm(data: TeacherSnapshot, classroom: Classroom, back: () -> Unit, save: (Long?, String, String, Boolean) -> Unit) {
-    var studentId by rememberSaveable { mutableLongStateOf(-1L) }
-    var kind by rememberSaveable { mutableStateOf("Participação") }
-    var body by rememberSaveable { mutableStateOf("") }
-    var approved by rememberSaveable { mutableStateOf(false) }
-    Heading("Nova observação", "Registre uma observação sobre a turma", back)
+@Composable private fun ObservationForm(data: TeacherSnapshot, classroom: Classroom, back: () -> Unit,
+    save: (Long?, String, String, Boolean) -> Unit, initial: Observation? = null, delete: (() -> Unit)? = null) {
+    var studentId by rememberSaveable(initial?.id) { mutableLongStateOf(initial?.studentId ?: -1L) }
+    var kind by rememberSaveable(initial?.id) { mutableStateOf(initial?.kind ?: "Participação") }
+    var body by rememberSaveable(initial?.id) { mutableStateOf(initial?.body.orEmpty()) }
+    var approved by rememberSaveable(initial?.id) { mutableStateOf(initial?.shareApproved ?: false) }
+    var confirmDeletion by remember { mutableStateOf(false) }
+    Heading(if (initial == null) "Nova observação" else "Editar observação", if (initial == null) "Registre uma observação sobre a turma" else "Registro de ${initial.date}", back)
     Panel {
         Text("Aluno (opcional)", fontWeight = FontWeight.Bold, color = ink)
         Spacer(Modifier.height(8.dp))
@@ -631,8 +644,19 @@ fun TeacherApp(store: TeacherStore) {
             Switch(approved, { approved = it })
         }
         Spacer(Modifier.height(12.dp))
-        PrimaryButton("Salvar observação") { save(studentId.takeIf { it != -1L }, kind, body, approved) }
+        PrimaryButton(if (initial == null) "Salvar observação" else "Salvar alterações") { save(studentId.takeIf { it != -1L }, kind, body, approved) }
+        if (delete != null) {
+            Spacer(Modifier.height(12.dp))
+            PrimaryButton("Excluir observação", secondary = true) { confirmDeletion = true }
+        }
     }
+    if (confirmDeletion && delete != null) AlertDialog(
+        onDismissRequest = { confirmDeletion = false },
+        title = { Text("Excluir observação?") },
+        text = { Text("Esta exclusão é permanente e afeta somente este registro pedagógico.") },
+        confirmButton = { TextButton(onClick = { confirmDeletion = false; delete() }) { Text("Excluir definitivamente") } },
+        dismissButton = { TextButton(onClick = { confirmDeletion = false }) { Text("Cancelar") } }
+    )
 }
 
 @Composable private fun PlanningScreen(data: TeacherSnapshot, classroom: Classroom?, day: String, onDay: (String) -> Unit,

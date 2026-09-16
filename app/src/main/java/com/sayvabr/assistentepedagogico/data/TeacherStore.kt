@@ -190,6 +190,25 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         writableDatabase.insertOrThrow("observations", null, values("classroom_id" to classroomId, "student_id" to studentId, "kind" to kind, "body" to body.trim(), "day" to LocalDate.now().toString(), "share_approved" to shareApproved))
     }
 
+    /** Edits an existing pedagogical observation without changing its identity or original date. */
+    fun updateObservation(classroomId: Long, observationId: Long, studentId: Long?, kind: String, body: String, shareApproved: Boolean) {
+        require(body.trim().length >= 5) { "Descreva a observação com ao menos 5 caracteres." }
+        require(kind in listOf("Comportamento", "Participação", "Aprendizagem", "Outro")) { "Tipo de observação inválido." }
+        if (studentId != null) {
+            readableDatabase.rawQuery("SELECT 1 FROM students WHERE id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString())).use { c ->
+                require(c.moveToFirst()) { "Aluno não pertence a esta turma." }
+            }
+        }
+        val changed = writableDatabase.update("observations", values("student_id" to studentId, "kind" to kind, "body" to body.trim(), "share_approved" to shareApproved), "id=? AND classroom_id=?", arrayOf(observationId.toString(), classroomId.toString()))
+        require(changed == 1) { "Observação não encontrada nesta turma." }
+    }
+
+    /** Permanently deletes only the selected observation. */
+    fun deleteObservation(classroomId: Long, observationId: Long) {
+        val removed = writableDatabase.delete("observations", "id=? AND classroom_id=?", arrayOf(observationId.toString(), classroomId.toString()))
+        require(removed == 1) { "Observação não encontrada nesta turma." }
+    }
+
     fun addAppointment(title: String, day: String, time: String) {
         require(title.isNotBlank()) { "Informe o compromisso." }
         LocalDate.parse(day)
