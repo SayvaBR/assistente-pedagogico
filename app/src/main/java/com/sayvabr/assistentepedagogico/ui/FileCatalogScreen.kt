@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -27,7 +26,7 @@ import com.sayvabr.assistentepedagogico.data.LibraryFile
 import com.sayvabr.assistentepedagogico.data.SavedFile
 import com.sayvabr.assistentepedagogico.data.TeacherStore
 
-/** Offline catalog. A second short-lived helper is used until the navigation PR shares its store. */
+/** Offline catalog. A second short-lived helper is used until the central-store callback refactor. */
 @Composable
 fun FileCatalogScreen(
     files: List<SavedFile>,
@@ -87,7 +86,7 @@ fun FileCatalogScreen(
             Surface(
                 modifier = Modifier.size(48.dp).clickable { selectedId = -1L }
                     .semantics { contentDescription = "Voltar à biblioteca" },
-                shape = RoundedCornerShape(15.dp), color = ApColors.White,
+                shape = RoundedCornerShape(ApShapeToken.Medium), color = ApColors.White,
                 border = BorderStroke(1.dp, ApPalette.Outline),
             ) { Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.BACK, color = ApColors.Primary) } }
             Spacer(Modifier.width(12.dp))
@@ -98,9 +97,7 @@ fun FileCatalogScreen(
         }
         Spacer(Modifier.height(17.dp))
         ApCard {
-            Box(Modifier.size(65.dp).background(ApColors.Sky, RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-                ApGlyph(ApGlyphKind.DOCUMENT, Modifier.size(38.dp), ApColors.Pressed)
-            }
+            ApIconBadge(ApGlyphKind.DOCUMENT, Modifier.size(65.dp))
             Spacer(Modifier.height(12.dp))
             Text(selected.name, color = ApColors.Navy, fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.Black)
             Spacer(Modifier.height(8.dp))
@@ -118,8 +115,12 @@ fun FileCatalogScreen(
             if (selected.trashedAt == null) {
                 ApRaisedButton("Abrir documento", onClick = { openFile(saved(selected)) }, glyph = ApGlyphKind.OPEN)
                 Spacer(Modifier.height(9.dp))
-                ApRaisedButton(if (selected.favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
-                    onClick = { perform { store.setFileFavorite(selected.id, !selected.favorite) } }, secondary = true)
+                ApRaisedButton(
+                    if (selected.favorite) "Remover dos favoritos" else "Adicionar aos favoritos",
+                    onClick = { perform { store.setFileFavorite(selected.id, !selected.favorite) } },
+                    glyph = ApGlyphKind.STAR,
+                    secondary = true,
+                )
                 Spacer(Modifier.height(9.dp))
                 ApRaisedButton("Mover para pasta", onClick = { folderChooser = true }, glyph = ApGlyphKind.FOLDER, secondary = true)
                 Spacer(Modifier.height(9.dp))
@@ -134,13 +135,13 @@ fun FileCatalogScreen(
                         store.setFileAccessState(selected.id, if (accessible) "available" else "revoked")
                         message = if (accessible) "Acesso ao documento confirmado." else "Acesso indisponível; seu vínculo foi preservado."
                     }
-                }, secondary = true)
+                }, glyph = ApGlyphKind.CHECK, secondary = true)
                 Spacer(Modifier.height(9.dp))
                 ApRaisedButton("Enviar à lixeira", onClick = { trashOpen = true }, glyph = ApGlyphKind.TRASH, secondary = true)
             } else {
                 ApRaisedButton("Restaurar documento", onClick = {
                     if (perform { store.restoreFile(selected.id) }) { selectedId = -1L; view = "Todos" }
-                }, glyph = ApGlyphKind.BACK)
+                }, glyph = ApGlyphKind.RESTORE)
                 Spacer(Modifier.height(9.dp))
                 ApRaisedButton("Excluir vínculo definitivamente", onClick = { purgeOpen = true }, glyph = ApGlyphKind.TRASH, secondary = true)
             }
@@ -151,15 +152,13 @@ fun FileCatalogScreen(
         Text("Arquivos", fontSize = 32.sp, lineHeight = 38.sp, fontWeight = FontWeight.Black, color = ApColors.Navy)
         Text("Organize materiais sem alterar os originais.", color = ApColors.Navy, fontSize = 14.sp)
         Spacer(Modifier.height(17.dp))
-        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), color = ApColors.Primary) {
+        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(ApShapeToken.Hero), color = ApColors.Primary) {
             Column(Modifier.padding(19.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(52.dp).background(ApColors.White, RoundedCornerShape(17.dp)), contentAlignment = Alignment.Center) {
-                        ApGlyph(ApGlyphKind.FOLDER, Modifier.size(31.dp), ApColors.Pressed)
-                    }
+                    ApIconBadge(ApGlyphKind.FOLDER, Modifier.size(56.dp))
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("SUA BIBLIOTECA", fontSize = 11.sp, color = ApColors.White, fontWeight = FontWeight.Black)
+                        Text("SUA BIBLIOTECA", fontSize = 11.sp, color = ApColors.White, fontWeight = FontWeight.Black, letterSpacing = .8.sp)
                         Text("${active.size} ${if (active.size == 1) "documento" else "documentos"}",
                             fontSize = 20.sp, fontWeight = FontWeight.Black, color = ApColors.White)
                     }
@@ -172,18 +171,19 @@ fun FileCatalogScreen(
             }
         }
         Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("Todos", "Favoritos", "Lixeira").forEach { option ->
-                FilterChip(selected = view == option, onClick = { view = option; folderFilter = -2L },
-                    label = { Text(option, fontSize = 12.sp, fontWeight = FontWeight.Bold) }, modifier = Modifier.weight(1f))
-            }
-        }
+        ApSegmentedControl(
+            options = listOf("Todos", "Favoritos", "Lixeira"),
+            selected = view,
+            onSelect = { option -> view = option; folderFilter = -2L },
+        )
         if (view != "Lixeira") {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Pastas", color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 19.sp, modifier = Modifier.weight(1f))
                 TextButton(onClick = { editingFolderId = -1L; nameDraft = ""; folderDialog = true }) {
-                    Text("+ Nova pasta", color = ApColors.Pressed)
+                    ApGlyph(ApGlyphKind.PLUS, Modifier.size(18.dp), ApColors.Pressed)
+                    Spacer(Modifier.width(5.dp))
+                    Text("Nova pasta", color = ApColors.Pressed, fontWeight = FontWeight.Bold)
                 }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -205,19 +205,30 @@ fun FileCatalogScreen(
             }
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
-            label = { Text("Buscar documento") }, singleLine = true,
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Buscar documento") },
+            singleLine = true,
             leadingIcon = { ApGlyph(ApGlyphKind.SEARCH, Modifier.size(22.dp), ApColors.Pressed) },
-            shape = RoundedCornerShape(18.dp))
+            shape = RoundedCornerShape(ApShapeToken.Medium),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = ApColors.Primary,
+                unfocusedBorderColor = ApPalette.Outline,
+                focusedContainerColor = ApColors.White,
+                unfocusedContainerColor = ApColors.White,
+            ),
+        )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("${matches.size} ${if (matches.size == 1) "resultado" else "resultados"}", color = ApColors.Navy, fontSize = 13.sp)
             TextButton(onClick = { alphabetical = !alphabetical }) {
-                Text(if (alphabetical) "Ordem: A–Z" else "Ordem: recentes", color = ApColors.Pressed, fontSize = 12.sp)
+                Text(if (alphabetical) "Ordem: A–Z" else "Ordem: recentes", color = ApColors.Pressed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
         if (matches.isEmpty()) ApCard {
-            ApGlyph(if (query.isBlank()) ApGlyphKind.FOLDER else ApGlyphKind.SEARCH, Modifier.size(40.dp), ApColors.Pressed)
-            Spacer(Modifier.height(8.dp))
+            ApIconBadge(if (query.isBlank()) ApGlyphKind.FOLDER else ApGlyphKind.SEARCH)
+            Spacer(Modifier.height(10.dp))
             Text(when {
                 query.isNotBlank() -> "Nenhum resultado para sua busca."
                 view == "Lixeira" -> "A lixeira está vazia."
@@ -227,31 +238,34 @@ fun FileCatalogScreen(
             if (query.isNotBlank()) TextButton(onClick = { query = "" }) { Text("Limpar pesquisa") }
         }
         matches.forEach { file ->
-            Surface(modifier = Modifier.fillMaxWidth().clickable { selectedId = file.id }
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { selectedId = file.id }
                     .semantics { contentDescription = "Ver detalhes de ${file.name}" },
-                color = ApColors.White, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, ApPalette.Outline)) {
+                color = ApColors.White,
+                shape = RoundedCornerShape(ApShapeToken.Card),
+                border = BorderStroke(1.dp, ApPalette.Outline),
+            ) {
                 Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(51.dp).background(ApColors.Sky, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                        ApGlyph(ApGlyphKind.DOCUMENT, Modifier.size(29.dp), ApColors.Pressed)
-                    }
+                    ApIconBadge(if (file.favorite && file.trashedAt == null) ApGlyphKind.STAR else ApGlyphKind.DOCUMENT)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(file.name, maxLines = 2, overflow = TextOverflow.Ellipsis, color = ApColors.Navy,
                             fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+                        Spacer(Modifier.height(3.dp))
                         Text(when {
                             file.trashedAt != null -> "Na lixeira · toque para restaurar"
                             file.accessState == "revoked" -> "Acesso indisponível · vínculo preservado"
                             file.favorite -> "Favorito · toque para organizar"
                             else -> folders.firstOrNull { it.id == file.folderId }?.name ?: "Sem pasta"
-                        }, color = ApColors.Navy, fontSize = 12.sp)
+                        }, color = ApColors.Navy.copy(alpha = .72f), fontSize = 12.sp)
                     }
-                    Text("›", color = ApColors.Pressed, fontSize = 25.sp)
+                    ApGlyph(ApGlyphKind.OPEN, Modifier.size(19.dp), ApColors.Pressed)
                 }
             }
             Spacer(Modifier.height(9.dp))
         }
         Spacer(Modifier.height(10.dp))
-        Text("Excluir um vínculo daqui nunca apaga o documento original.", color = ApColors.Navy, fontSize = 12.sp)
+        Text("Excluir um vínculo daqui nunca apaga o documento original.", color = ApColors.Navy.copy(alpha = .76f), fontSize = 12.sp)
     }
 
     if (renameOpen && selected != null) AlertDialog(
@@ -319,7 +333,10 @@ fun FileCatalogScreen(
         }) { Text("Excluir pasta") } },
         dismissButton = { TextButton(onClick = { folderDeleteDialog = false }) { Text("Cancelar") } },
     )
-    message?.let { text -> AlertDialog(onDismissRequest = { message = null },
-        title = { Text("Biblioteca") }, text = { Text(text) },
-        confirmButton = { TextButton(onClick = { message = null }) { Text("Entendi") } }) }
+    message?.let { text -> AlertDialog(
+        onDismissRequest = { message = null },
+        title = { Text("Biblioteca") },
+        text = { Text(text) },
+        confirmButton = { TextButton(onClick = { message = null }) { Text("Entendi") } },
+    ) }
 }
