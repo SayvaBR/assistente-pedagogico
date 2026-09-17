@@ -46,7 +46,8 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            set -euo pipefail
+            # android-emulator-runner launches this script with /bin/sh, not bash.
+            set -eu
             gradle --no-daemon :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
             # Only the debug applicationId has .preview; Activity stays in main namespace.
