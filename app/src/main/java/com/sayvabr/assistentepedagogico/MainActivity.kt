@@ -15,7 +15,8 @@ import com.sayvabr.assistentepedagogico.ui.ApTheme
 import com.sayvabr.assistentepedagogico.ui.TeacherApp
 
 class MainActivity : ComponentActivity() {
-    private val store by lazy { TeacherStore(applicationContext) }
+    private val storeDelegate = lazy { TeacherStore(applicationContext) }
+    private val store by storeDelegate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,10 +34,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Configuration changes destroy this Activity too. Its replacement owns a new helper;
-        // always close the old connection instead of leaking it until process termination.
-        // A fresh TeacherStore reopens the same private DB without deleting any data.
-        if (::store.isInitialized) store.close()
+        // Rotation/configuration replacement owns a new helper, while this one must be closed.
+        // Lazy.isInitialized avoids creating a database connection solely to close it.
+        if (storeDelegate.isInitialized()) store.close()
         super.onDestroy()
     }
 }
