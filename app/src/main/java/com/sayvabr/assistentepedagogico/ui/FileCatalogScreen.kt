@@ -2,6 +2,7 @@ package com.sayvabr.assistentepedagogico.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,13 +11,16 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sayvabr.assistentepedagogico.data.SavedFile
 
-/** Local references to SAF documents, not a private copy or a cloud library. */
+/** Document links obtained through SAF; files still belong to their original providers. */
 @Composable
 fun FileCatalogScreen(
     files: List<SavedFile>,
@@ -32,92 +36,190 @@ fun FileCatalogScreen(
     var removing by remember { mutableStateOf(false) }
     var draftName by rememberSaveable { mutableStateOf("") }
     val selected = files.firstOrNull { it.id == selectedId }
-    // File details is an actual nested route inside this tab, not a dead tile.
+    val matches = files.filter { it.name.contains(query.trim(), ignoreCase = true) }
+        .let { result ->
+            if (alphabetical) result.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+            else result.sortedByDescending { it.id }
+        }
+
     BackHandler(enabled = selected != null && !renaming && !removing) { selectedId = -1L }
     if (selected != null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { selectedId = -1L }) { Text("Voltar", color = ApColors.Primary) }
-            Spacer(Modifier.width(8.dp))
-            Text("Detalhes do arquivo", color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 21.sp)
-        }
-        Spacer(Modifier.height(12.dp))
-        Surface(shape = RoundedCornerShape(19.dp), color = ApColors.White,
-            border = BorderStroke(1.dp, ApColors.Primary.copy(alpha = .15f)), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp)) {
-                Text(selected.name, color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 22.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("Documento vinculado ao aparelho", color = ApColors.Navy, fontSize = 13.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("O aplicativo guarda uma referência ao documento original; não cria uma cópia nem envia à nuvem.",
-                    color = ApColors.Navy, fontSize = 13.sp)
-                Spacer(Modifier.height(20.dp))
-                Button(onClick = { openFile(selected) }, modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = ApColors.Primary)) { Text("Abrir documento") }
-                Spacer(Modifier.height(9.dp))
-                OutlinedButton(onClick = { draftName = selected.name; renaming = true }, modifier = Modifier.fillMaxWidth()) { Text("Renomear no catálogo") }
-                OutlinedButton(onClick = { removing = true }, modifier = Modifier.fillMaxWidth()) { Text("Remover do aplicativo") }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(43.dp).clickable { selectedId = -1L }
+                    .semantics { contentDescription = "Voltar ao catálogo" },
+                shape = RoundedCornerShape(14.dp), color = ApColors.White,
+                border = BorderStroke(1.dp, Color(0xFFCDE8F8)),
+            ) { Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.BACK, color = ApColors.Primary) } }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                ApEyebrow("Biblioteca / documento")
+                Text("Detalhes do arquivo", color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 23.sp)
             }
         }
-    } else {
-        Text("Arquivos", fontSize = 27.sp, fontWeight = FontWeight.Black, color = ApColors.Navy)
-        Text("Seus documentos vinculados em um só lugar", fontSize = 14.sp, color = ApColors.Navy)
-        Spacer(Modifier.height(17.dp))
-        Button(onClick = importFile, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = ApColors.Primary),
-            shape = RoundedCornerShape(18.dp)) { Text("Importar documento", fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.height(14.dp))
-        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Buscar arquivos por nome") },
-            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
-        Spacer(Modifier.height(8.dp))
-        TextButton(onClick = { alphabetical = !alphabetical }) {
-            Text(if (alphabetical) "Ordem: nome (A–Z) • mudar" else "Ordem: recentes • mudar", color = ApColors.Navy)
+        Spacer(Modifier.height(20.dp))
+        ApCard {
+            Box(
+                Modifier.size(68.dp).background(ApColors.Sky, RoundedCornerShape(19.dp)),
+                contentAlignment = Alignment.Center,
+            ) { ApGlyph(ApGlyphKind.DOCUMENT, Modifier.size(39.dp), color = ApColors.Pressed) }
+            Spacer(Modifier.height(17.dp))
+            Text(selected.name, color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 23.sp, lineHeight = 28.sp)
+            Spacer(Modifier.height(8.dp))
+            ApEyebrow("Referência do documento")
+            Spacer(Modifier.height(9.dp))
+            Text(
+                "Este aplicativo guarda o vínculo com o documento original. Não cria uma cópia nem envia o conteúdo à nuvem.",
+                color = ApColors.Navy, fontSize = 14.sp, lineHeight = 21.sp,
+            )
+            Spacer(Modifier.height(21.dp))
+            ApRaisedButton("Abrir documento", onClick = { openFile(selected) }, glyph = ApGlyphKind.OPEN)
+            Spacer(Modifier.height(10.dp))
+            ApRaisedButton("Renomear no catálogo", onClick = {
+                draftName = selected.name
+                renaming = true
+            }, glyph = ApGlyphKind.EDIT, secondary = true)
+            Spacer(Modifier.height(10.dp))
+            ApRaisedButton("Remover vínculo", onClick = { removing = true }, glyph = ApGlyphKind.TRASH, secondary = true)
         }
+        Spacer(Modifier.height(14.dp))
+        Text("Remover um vínculo nunca apaga o arquivo original.", fontSize = 12.sp, color = ApColors.Navy)
+    } else {
+        ApEyebrow("Seu espaço de trabalho")
+        Spacer(Modifier.height(4.dp))
+        Text("Arquivos", fontSize = 32.sp, lineHeight = 36.sp, fontWeight = FontWeight.Black, color = ApColors.Navy)
+        Spacer(Modifier.height(4.dp))
+        Text("Tudo à mão para preparar suas aulas.", fontSize = 14.sp, color = ApColors.Navy)
+        Spacer(Modifier.height(20.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(), color = ApColors.Primary,
+            shape = RoundedCornerShape(23.dp),
+        ) {
+            Column(Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(51.dp).background(ApColors.White, RoundedCornerShape(15.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) { ApGlyph(ApGlyphKind.FOLDER, Modifier.size(29.dp), color = ApColors.Pressed) }
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("SUA BIBLIOTECA", fontSize = 11.sp, color = ApColors.White, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                        Text("${files.size} ${if (files.size == 1) "documento vinculado" else "documentos vinculados"}",
+                            fontWeight = FontWeight.Black, fontSize = 18.sp, color = ApColors.White)
+                    }
+                }
+                Spacer(Modifier.height(13.dp))
+                Text("Adicione materiais de qualquer pasta acessível pelo Android. Seus originais continuam onde estão.",
+                    color = ApColors.White, fontSize = 13.sp, lineHeight = 19.sp)
+                Spacer(Modifier.height(17.dp))
+                ApRaisedButton("Importar documento", onClick = importFile, glyph = ApGlyphKind.IMPORT, secondary = true)
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Explorar documentos", fontWeight = FontWeight.Black, fontSize = 20.sp, color = ApColors.Navy, modifier = Modifier.weight(1f))
+            Surface(color = ApColors.White, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Color(0xFFCDE8F8))) {
+                Text("${matches.size}", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = ApColors.Pressed,
+                    fontSize = 12.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = query, onValueChange = { query = it },
+            leadingIcon = { ApGlyph(ApGlyphKind.SEARCH, Modifier.size(22.dp), color = ApColors.Pressed) },
+            label = { Text("Buscar por nome") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = ApColors.Primary,
+                unfocusedBorderColor = Color(0xFFCDE8F8),
+                focusedContainerColor = ApColors.White,
+                unfocusedContainerColor = ApColors.White,
+            ),
+        )
         Spacer(Modifier.height(8.dp))
-        val matches = files.filter { it.name.contains(query.trim(), ignoreCase = true) }
-            .let { if (alphabetical) it.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { file -> file.name }) else it.sortedByDescending { file -> file.id } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { alphabetical = !alphabetical }) {
+                Text(if (alphabetical) "Ordem: A–Z · alterar" else "Ordem: recentes · alterar", color = ApColors.Navy,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(Modifier.height(9.dp))
+
         if (matches.isEmpty()) {
-            Surface(shape = RoundedCornerShape(19.dp), color = ApColors.White, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp)) {
-                    Text(if (query.isBlank()) "Nenhum documento importado" else "Nenhum resultado para sua busca", fontWeight = FontWeight.Black, color = ApColors.Navy)
-                    Spacer(Modifier.height(7.dp))
-                    Text(if (query.isBlank()) "Importe um arquivo do aparelho para começar." else "Tente outra palavra ou limpe a pesquisa.", color = ApColors.Navy)
+            ApCard {
+                Box(Modifier.size(55.dp).background(ApColors.Sky, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                    ApGlyph(if (query.isBlank()) ApGlyphKind.DOCUMENT else ApGlyphKind.SEARCH, Modifier.size(30.dp), color = ApColors.Pressed)
+                }
+                Spacer(Modifier.height(14.dp))
+                Text(if (query.isBlank()) "Sua biblioteca começa aqui" else "Nenhum arquivo encontrado",
+                    color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(if (query.isBlank()) "Toque em Importar documento para vincular seu primeiro material."
+                    else "Tente outro nome ou limpe sua pesquisa.", color = ApColors.Navy, fontSize = 14.sp, lineHeight = 20.sp)
+                if (query.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    ApRaisedButton("Limpar pesquisa", onClick = { query = "" }, secondary = true)
                 }
             }
         }
         matches.forEach { file ->
-            Surface(modifier = Modifier.fillMaxWidth().clickable { selectedId = file.id }, color = ApColors.White,
-                shape = RoundedCornerShape(19.dp), border = BorderStroke(1.dp, ApColors.Primary.copy(alpha = .15f))) {
-                Row(Modifier.padding(17.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = ApColors.Sky) {
-                        Text("DOC", modifier = Modifier.padding(12.dp), fontSize = 12.sp, fontWeight = FontWeight.Black, color = ApColors.Navy)
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { selectedId = file.id }
+                    .semantics { contentDescription = "Ver detalhes de ${file.name}" },
+                color = ApColors.White, shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color(0xFFCDE8F8)),
+            ) {
+                Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(53.dp).background(ApColors.Sky, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                        ApGlyph(ApGlyphKind.DOCUMENT, Modifier.size(29.dp), color = ApColors.Pressed)
                     }
-                    Spacer(Modifier.width(13.dp))
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(file.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.ExtraBold, color = ApColors.Navy)
-                        Text("Abrir detalhes e ações", fontSize = 12.sp, color = ApColors.Navy)
+                        Text(file.name, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = ApColors.Navy)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Toque para abrir e organizar", fontSize = 12.sp, color = ApColors.Navy.copy(alpha = .75f))
                     }
-                    Text("Ver", color = ApColors.Primary, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    Text("›", color = ApColors.Primary, fontSize = 29.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            Spacer(Modifier.height(9.dp))
+            Spacer(Modifier.height(10.dp))
         }
-        Spacer(Modifier.height(12.dp))
-        Text("Os documentos originais continuam no aparelho, mesmo se você remover um item daqui.", fontSize = 12.sp, color = ApColors.Navy)
+        Spacer(Modifier.height(10.dp))
+        Text("Os documentos originais permanecem no provedor de origem, mesmo ao remover um vínculo daqui.",
+            fontSize = 12.sp, color = ApColors.Navy, lineHeight = 17.sp)
     }
+
     if (renaming && selected != null) AlertDialog(
         onDismissRequest = { renaming = false },
         title = { Text("Renomear no catálogo") },
-        text = { Column {
-            OutlinedTextField(value = draftName, onValueChange = { if (it.length <= 180) draftName = it }, label = { Text("Nome exibido") }, singleLine = true)
-            Text("Isso não renomeia o arquivo original no seu aparelho.", fontSize = 12.sp)
-        } },
-        confirmButton = { TextButton(onClick = { if (draftName.isNotBlank()) { renaming = false; renameFile(selected, draftName) } }, enabled = draftName.isNotBlank()) { Text("Salvar") } },
+        text = {
+            Column {
+                OutlinedTextField(value = draftName, onValueChange = { if (it.length <= 180) draftName = it },
+                    label = { Text("Nome exibido") }, singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                Text("O nome do arquivo original não será alterado.", fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (draftName.isNotBlank()) { renaming = false; renameFile(selected, draftName) }
+            }, enabled = draftName.isNotBlank()) { Text("Salvar") }
+        },
         dismissButton = { TextButton(onClick = { renaming = false }) { Text("Cancelar") } },
     )
     if (removing && selected != null) AlertDialog(
         onDismissRequest = { removing = false },
         title = { Text("Remover do aplicativo?") },
-        text = { Text("Somente a referência será removida do catálogo. O arquivo original NÃO será apagado. Para adicioná-lo novamente, use Importar documento.") },
-        confirmButton = { TextButton(onClick = { removing = false; selectedId = -1L; removeFile(selected) }) { Text("Remover referência") } },
+        text = { Text("Só o vínculo será removido do catálogo. O arquivo original NÃO será apagado. Você poderá importá-lo novamente.") },
+        confirmButton = { TextButton(onClick = {
+            removing = false
+            selectedId = -1L
+            removeFile(selected)
+        }) { Text("Remover vínculo") } },
         dismissButton = { TextButton(onClick = { removing = false }) { Text("Cancelar") } },
     )
 }

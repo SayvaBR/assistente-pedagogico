@@ -204,11 +204,15 @@ fun TeacherApp(store: TeacherStore) {
               startAttendance = { selectedDay = today(); navigate("attendance") }
           )
           "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onAddStudent = { navigate("addStudent") }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
-                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
+                    "observationHistory" -> if (currentClass != null) ObservationHistoryScreen(
+                        snapshot, currentClass, onBack = { back() },
+                        onNew = { navigate("observation") },
+                        onOpen = { selectedObservation = it; navigate("editObservation") })
+                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull { it.id == selectedObservation && it.classroomId == currentClass.id }?.let { observation ->
                         ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share ->
-                            commit("classDetail") { store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share) }
-                        }, initial = observation, delete = { commit("classDetail") { store.deleteObservation(currentClass.id, observation.id) } })
+                            commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") { store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share) }
+                        }, initial = observation, delete = { commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") { store.deleteObservation(currentClass.id, observation.id) } })
                     }
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) },
               openLesson = { lessonId -> selectedLesson = lessonId; navigate("editLesson") },
@@ -510,6 +514,7 @@ fun TeacherApp(store: TeacherStore) {
     ActionTile("✓", "Frequência", "Registrar presenças e faltas") { go("attendance") }
     ActionTile("▦", "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
     ActionTile("📝", "Registros", "Nova observação pedagógica") { go("observation") }
+    ActionTile("▦", "Histórico de registros", "Consultar e editar todas as observações") { go("observationHistory") }
     Spacer(Modifier.height(17.dp))
     Subtitle("Alunos")
     val students = data.students.filter { it.classroomId == classroom.id }
@@ -626,13 +631,34 @@ fun TeacherApp(store: TeacherStore) {
     var body by rememberSaveable(initial?.id) { mutableStateOf(initial?.body.orEmpty()) }
     var approved by rememberSaveable(initial?.id) { mutableStateOf(initial?.shareApproved ?: false) }
     var confirmDeletion by remember { mutableStateOf(false) }
+    var studentPickerExpanded by remember { mutableStateOf(false) }
+    // Names are not unique. Select by stable student ID to avoid attaching a
+    // sensitive pedagogical note to the wrong child when two names match.
+    val classroomStudents = data.students.filter { it.classroomId == classroom.id }
+    val selectedStudent = classroomStudents.firstOrNull { it.id == studentId }
+    fun studentLabel(student: Student): String = if (classroomStudents.count { it.name == student.name } > 1)
+        "${student.name} · cadastro ${student.id}" else student.name
     Heading(if (initial == null) "Nova observação" else "Editar observação", if (initial == null) "Registre uma observação sobre a turma" else "Registro de ${initial.date}", back)
     Panel {
         Text("Aluno (opcional)", fontWeight = FontWeight.Bold, color = ink)
         Spacer(Modifier.height(8.dp))
-        Choices(listOf("Turma inteira") + data.students.filter { it.classroomId == classroom.id }.map { it.name },
-            if (studentId == -1L) "Turma inteira" else data.students.firstOrNull { it.id == studentId }?.name ?: "Turma inteira") { label ->
-            studentId = data.students.firstOrNull { it.classroomId == classroom.id && it.name == label }?.id ?: -1L
+        Box {
+            OutlinedButton(onClick = { studentPickerExpanded = true }, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)) {
+                Text(selectedStudent?.let(::studentLabel) ?: "Turma inteira", maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded = studentPickerExpanded, onDismissRequest = { studentPickerExpanded = false }) {
+                DropdownMenuItem(text = { Text("Turma inteira") }, onClick = {
+                    studentId = -1L
+                    studentPickerExpanded = false
+                })
+                classroomStudents.forEach { student ->
+                    DropdownMenuItem(text = { Text(studentLabel(student)) }, onClick = {
+                        studentId = student.id
+                        studentPickerExpanded = false
+                    })
+                }
+            }
         }
     }
     Spacer(Modifier.height(11.dp))
