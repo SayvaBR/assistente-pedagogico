@@ -204,11 +204,15 @@ fun TeacherApp(store: TeacherStore) {
               startAttendance = { selectedDay = today(); navigate("attendance") }
           )
           "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onAddStudent = { navigate("addStudent") }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
-                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
+                    "observationHistory" -> if (currentClass != null) ObservationHistoryScreen(
+                        snapshot, currentClass, onBack = { back() },
+                        onNew = { navigate("observation") },
+                        onOpen = { selectedObservation = it; navigate("editObservation") })
+                    "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull { it.id == selectedObservation && it.classroomId == currentClass.id }?.let { observation ->
                         ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share ->
-                            commit("classDetail") { store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share) }
-                        }, initial = observation, delete = { commit("classDetail") { store.deleteObservation(currentClass.id, observation.id) } })
+                            commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") { store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share) }
+                        }, initial = observation, delete = { commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") { store.deleteObservation(currentClass.id, observation.id) } })
                     }
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { navigate(it) },
               openLesson = { lessonId -> selectedLesson = lessonId; navigate("editLesson") },
@@ -510,6 +514,7 @@ fun TeacherApp(store: TeacherStore) {
     ActionTile("✓", "Frequência", "Registrar presenças e faltas") { go("attendance") }
     ActionTile("▦", "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
     ActionTile("📝", "Registros", "Nova observação pedagógica") { go("observation") }
+    ActionTile("▦", "Histórico de registros", "Consultar e editar todas as observações") { go("observationHistory") }
     Spacer(Modifier.height(17.dp))
     Subtitle("Alunos")
     val students = data.students.filter { it.classroomId == classroom.id }

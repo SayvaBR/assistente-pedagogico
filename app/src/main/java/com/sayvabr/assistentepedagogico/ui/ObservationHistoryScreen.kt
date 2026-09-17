@@ -48,7 +48,7 @@ fun ObservationHistoryScreen(
             (studentFilter == -1L || note.studentId == studentFilter) &&
             (query.isBlank() || note.body.contains(query.trim(), ignoreCase = true) ||
                 note.kind.contains(query.trim(), ignoreCase = true) ||
-                names[note.studentId]?.contains(query.trim(), ignoreCase = true) == true)
+                note.studentId?.let { names[it] }?.contains(query.trim(), ignoreCase = true) == true)
     }.sortedWith(compareByDescending<com.sayvabr.assistentepedagogico.data.Observation> { it.date }.thenByDescending { it.id })
 
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +168,7 @@ fun ObservationHistoryScreen(
                     Spacer(Modifier.height(3.dp))
                     Text(runCatching { LocalDate.parse(note.date).format(dateFormat) }.getOrDefault(note.date),
                         color = ApColors.Navy, fontSize = 12.sp)
-                    names[note.studentId]?.let { name ->
+                    note.studentId?.let { names[it] }?.let { name ->
                         Spacer(Modifier.height(3.dp))
                         Text(name, color = ApColors.Navy, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
