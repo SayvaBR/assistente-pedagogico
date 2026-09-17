@@ -11,6 +11,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Preview must match the PR branch HEAD, not an implicit test merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -25,5 +28,26 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # Build remains a required quality gate. No APK artifact is uploaded: owner
-      # explicitly postponed the next preview. Re-enable only on new instruction.
+      # An explicit, temporary owner request: only PR #13 publishes a DEBUG preview.
+      # Never upload release/AAB, student records, signing keys or local databases.
+      # Artifact is created only after all compilation, unit test and lint gates pass.
+      - name: Check APK and record build provenance
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 13
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          printf 'Repository: %s\nPR: %s\nCommit: %s\nPackage: com.sayvabr.assistentepedagogico.preview\nVariant: debug / testing only\n' \
+            "$GITHUB_REPOSITORY" "${{ github.event.pull_request.number }}" "$GITHUB_SHA" > app/build/outputs/apk/debug/BUILD_INFO.txt
+          sha256sum "$apk" >> app/build/outputs/apk/debug/BUILD_INFO.txt
+      - name: Upload installable preview APK (3-day retention)
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 13
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/debug/BUILD_INFO.txt
+          if-no-files-found: error
+          retention-days: 3
