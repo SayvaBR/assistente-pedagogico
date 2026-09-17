@@ -12,3 +12,4 @@ local.properties
 .env.*
 .DS_Store
 captures/private/
+__pycache__/

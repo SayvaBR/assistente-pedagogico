@@ -59,6 +59,10 @@ fun TeacherApp(store: TeacherStore) {
     var selectedObservation by rememberSaveable { mutableLongStateOf(-1L) }
     var backStack by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     var confirmExit by remember { mutableStateOf(false) }
+    // Tracks unsaved edits on the screen currently shown, so hardware Back and the
+    // header back arrow ask before discarding data instead of navigating away silently.
+    var formDirty by remember { mutableStateOf(false) }
+    var confirmDiscard by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
@@ -94,6 +98,14 @@ fun TeacherApp(store: TeacherStore) {
             else -> confirmExit = true
         }
     }
+    // Entry point for hardware Back and the header back arrow: intercepts navigation
+    // when the visible form has unsaved edits, instead of calling back() directly.
+    fun requestBack() {
+        if (formDirty) confirmDiscard = true else back()
+    }
+    // formDirty only describes the screen currently on top; once navigation actually
+    // happens (save success or a confirmed discard) the next screen starts clean.
+    LaunchedEffect(screen) { formDirty = false }
     fun afterSave(destination: String) {
         when {
             destination == "createClass" -> {
@@ -148,7 +160,7 @@ fun TeacherApp(store: TeacherStore) {
     }
 
     val snapshot = data
-    BackHandler(enabled = snapshot?.profile != null) { back() }
+    BackHandler(enabled = snapshot?.profile != null) { requestBack() }
     if (snapshot == null) {
         Box(Modifier.fillMaxSize().background(canvas), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -180,11 +192,12 @@ fun TeacherApp(store: TeacherStore) {
               onPick = { selectedClass = it; navigate("classDetail") },
               onAdd = { navigate("createClass") },
               onRestore = { id -> commit("classes") { store.setClassArchived(id, false) } })
-                    "createClass" -> ClassForm(onBack = { back() }, onSave = { name, stage, shift -> commit("classes") { store.createClass(name, stage, shift) } })
+                    "createClass" -> ClassForm(onBack = { requestBack() }, onSave = { name, stage, shift -> commit("classes") { store.createClass(name, stage, shift) } }, onDirty = { formDirty = true })
                     "editClass" -> if (currentClass != null) ClassForm(
-              onBack = { back() },
+              onBack = { requestBack() },
               onSave = { name, stage, shift -> commit("classDetail") { store.updateClass(currentClass.id, name, stage, shift) } },
-              initial = currentClass)
+              initial = currentClass,
+              onDirty = { formDirty = true })
           "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
               back = { back() },
               archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
@@ -203,7 +216,7 @@ fun TeacherApp(store: TeacherStore) {
               openDay = { day -> selectedDay = day; navigate("attendance") },
               startAttendance = { selectedDay = today(); navigate("attendance") }
           )
-          "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { back() }, onAddStudent = { navigate("addStudent") }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } })
+          "attendance" -> if (currentClass != null) AttendanceEditor(snapshot, currentClass, selectedDay, onDay = { selectedDay = it }, onBack = { requestBack() }, onAddStudent = { navigate("addStudent") }, onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } }, onDirty = { formDirty = true })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share -> commit("classDetail") { store.addObservation(currentClass.id, studentId, kind, body, share) } })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull { it.id == selectedObservation && it.classroomId == currentClass.id }?.let { observation ->
                         ObservationForm(snapshot, currentClass, { back() }, { studentId, kind, body, share ->
@@ -250,7 +263,7 @@ fun TeacherApp(store: TeacherStore) {
           )
                     "more" -> MoreScreen(snapshot, { navigate(it) })
                     "profile" -> ProfileForm(snapshot.profile.name, { back() }, { name -> commit("more") { store.saveProfile(name) } })
-                    else -> HomeScreen(snapshot, currentClass, { screen = it }, { selectedClass = it })
+                    else -> HomeScreen(snapshot, currentClass, { navigate(it) }, { selectedClass = it })
                 }
                 Spacer(Modifier.height(24.dp))
             }
@@ -267,6 +280,13 @@ fun TeacherApp(store: TeacherStore) {
         text = { Text("Seus registros já salvos permanecem neste aparelho. Para sair, confirme abaixo.") },
         confirmButton = { TextButton(onClick = { confirmExit = false; (context as? android.app.Activity)?.finish() }) { Text("Sair") } },
         dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Continuar no app") } }
+    )
+    if (confirmDiscard) AlertDialog(
+        onDismissRequest = { confirmDiscard = false },
+        title = { Text("Descartar alterações?") },
+        text = { Text("Suas alterações nesta tela ainda não foram salvas e serão perdidas.") },
+        confirmButton = { TextButton(onClick = { confirmDiscard = false; back() }) { Text("Descartar") } },
+        dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Continuar editando") } }
     )
 }
 
@@ -422,19 +442,19 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit, initial: Classroom? = null) {
+@Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit, initial: Classroom? = null, onDirty: () -> Unit = {}) {
     var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
     var stage by rememberSaveable(initial?.id) { mutableStateOf(initial?.stage ?: "Ensino Fundamental") }
     var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: "Matutino") }
     Heading(if (initial == null) "Vamos criar sua turma?" else "Editar turma", if (initial == null) "Você poderá adicionar alunos depois." else "Atualize os dados da turma.", onBack)
     Panel {
-        Input("Nome da turma (ex.: 5º Ano A)", name, { name = it })
+        Input("Nome da turma (ex.: 5º Ano A)", name, { name = it; onDirty() })
         Text("Etapa de ensino", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(9.dp))
-        Choices(listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio"), stage) { stage = it }
+        Choices(listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio"), stage) { stage = it; onDirty() }
         Text("Turno", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Choices(listOf("Matutino", "Vespertino", "Noturno"), shift) { shift = it }
+        Choices(listOf("Matutino", "Vespertino", "Noturno"), shift) { shift = it; onDirty() }
         Spacer(Modifier.height(10.dp))
         PrimaryButton(if (initial == null) "Criar turma →" else "Salvar alterações") { onSave(name, stage, shift) }
     }
@@ -580,7 +600,7 @@ fun TeacherApp(store: TeacherStore) {
     Spacer(Modifier.height(15.dp))
 }
 
-@Composable private fun AttendanceEditor(data: TeacherSnapshot, classroom: Classroom, day: String, onDay: (String) -> Unit, onBack: () -> Unit, onAddStudent: () -> Unit, onSave: (Map<Long, String>) -> Unit) {
+@Composable private fun AttendanceEditor(data: TeacherSnapshot, classroom: Classroom, day: String, onDay: (String) -> Unit, onBack: () -> Unit, onAddStudent: () -> Unit, onSave: (Map<Long, String>) -> Unit, onDirty: () -> Unit = {}) {
     val students = data.students.filter { it.classroomId == classroom.id }
     val draft = remember(classroom.id, day, data.attendance) {
         mutableStateMapOf<Long, String>().apply {
@@ -608,7 +628,10 @@ fun TeacherApp(store: TeacherStore) {
             Panel {
                 Text(student.name, color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                 Spacer(Modifier.height(8.dp))
-                Choices(listOf("Presente", "Falta", "Pendente"), when(draft[student.id]) { "P" -> "Presente"; "F" -> "Falta"; else -> "Pendente" }) { label -> draft[student.id] = when(label) { "Presente" -> "P"; "Falta" -> "F"; else -> "?" } }
+                Choices(listOf("Presente", "Falta", "Pendente"), when(draft[student.id]) { "P" -> "Presente"; "F" -> "Falta"; else -> "Pendente" }) { label ->
+                    val next = when(label) { "Presente" -> "P"; "Falta" -> "F"; else -> "?" }
+                    if (draft[student.id] != next) { draft[student.id] = next; onDirty() }
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
