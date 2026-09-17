@@ -5,6 +5,7 @@ on:
     branches: [main]
 permissions:
   contents: read
+  pull-requests: read
 concurrency:
   group: agent-quality-${{ github.ref }}
   cancel-in-progress: true
@@ -14,8 +15,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Self-test the auditor with synthetic fixtures
-        run: python3 -m unittest discover -s tools/tests -p 'test_agent_quality.py' -v
+      - name: Self-test agents using synthetic fixtures
+        run: python3 -m unittest discover -s tools/tests -p 'test_*.py' -v
       - name: Validate design-system contracts and workflow safety
         shell: bash
         run: |
@@ -27,3 +28,8 @@ jobs:
             cat quality-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Detect conflicting sibling PR file edits
+        if: github.event_name == 'pull_request'
+        env:
+          GH_READ_TOKEN: ${{ github.token }}
+        run: python3 tools/pr_overlap.py
