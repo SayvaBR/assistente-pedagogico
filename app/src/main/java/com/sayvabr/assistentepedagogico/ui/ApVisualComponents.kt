@@ -3,6 +3,8 @@ package com.sayvabr.assistentepedagogico.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -10,6 +12,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -19,16 +23,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Shared visual primitives for the product's white/blue tactile UI. No gradients or shadow. */
-enum class ApGlyphKind { DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLDER }
+/** Shared blue-and-white, solid-depth visual primitives. No gradients, shadows or emoji. */
+enum class ApGlyphKind {
+    DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLDER,
+    HOME, CALENDAR, USERS, MORE, STAR, RESTORE, PLUS, CHECK, CLOCK, NOTE
+}
 
-/** Small rounded stroke glyphs. Custom drawn and independent from emoji/font availability.
- * Full Lucide asset integration is tracked separately; these are not presented as Lucide assets.
- */
+/** Rounded original vector icons; no font fallback or external service required. */
 @Composable
 fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color: Color = ApColors.Navy) {
     Canvas(modifier) {
@@ -38,7 +46,7 @@ fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color:
         fun segment(x1: Float, y1: Float, x2: Float, y2: Float) =
             drawLine(color, Offset(x1 * u, y1 * u), Offset(x2 * u, y2 * u), strokeWidth = w, cap = StrokeCap.Round)
         when (kind) {
-            ApGlyphKind.DOCUMENT -> {
+            ApGlyphKind.DOCUMENT, ApGlyphKind.NOTE -> {
                 drawRoundRect(color, topLeft = Offset(.24f * u, .12f * u), size = Size(.52f * u, .75f * u), cornerRadius = CornerRadius(.07f * u), style = line)
                 segment(.34f, .46f, .66f, .46f)
                 segment(.34f, .60f, .66f, .60f)
@@ -82,10 +90,71 @@ fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color:
                 segment(.17f, .22f, .43f, .22f)
                 segment(.43f, .22f, .55f, .35f)
             }
+            ApGlyphKind.HOME -> {
+                segment(.13f, .45f, .50f, .13f)
+                segment(.50f, .13f, .87f, .45f)
+                segment(.22f, .39f, .22f, .84f)
+                segment(.78f, .39f, .78f, .84f)
+                segment(.22f, .84f, .41f, .84f)
+                segment(.41f, .84f, .41f, .62f)
+                segment(.41f, .62f, .59f, .62f)
+                segment(.59f, .62f, .59f, .84f)
+                segment(.59f, .84f, .78f, .84f)
+            }
+            ApGlyphKind.CALENDAR -> {
+                drawRoundRect(color, topLeft = Offset(.16f * u, .23f * u), size = Size(.68f * u, .66f * u), cornerRadius = CornerRadius(.07f * u), style = line)
+                segment(.16f, .43f, .84f, .43f)
+                segment(.35f, .12f, .35f, .31f)
+                segment(.65f, .12f, .65f, .31f)
+                drawCircle(color, radius = .045f * u, center = Offset(.39f * u, .63f * u))
+                drawCircle(color, radius = .045f * u, center = Offset(.60f * u, .63f * u))
+            }
+            ApGlyphKind.USERS -> {
+                drawCircle(color, radius = .135f * u, center = Offset(.39f * u, .32f * u), style = line)
+                drawCircle(color, radius = .10f * u, center = Offset(.72f * u, .36f * u), style = line)
+                segment(.13f, .82f, .13f, .69f)
+                segment(.13f, .69f, .24f, .57f)
+                segment(.24f, .57f, .54f, .57f)
+                segment(.54f, .57f, .66f, .69f)
+                segment(.66f, .69f, .66f, .82f)
+                segment(.13f, .82f, .66f, .82f)
+                segment(.70f, .57f, .84f, .63f)
+                segment(.84f, .63f, .87f, .81f)
+            }
+            ApGlyphKind.MORE -> {
+                drawCircle(color, radius = .07f * u, center = Offset(.22f * u, .50f * u))
+                drawCircle(color, radius = .07f * u, center = Offset(.50f * u, .50f * u))
+                drawCircle(color, radius = .07f * u, center = Offset(.78f * u, .50f * u))
+            }
+            ApGlyphKind.STAR -> {
+                val points = listOf(.50f to .11f, .62f to .39f, .91f to .43f, .68f to .62f, .75f to .89f, .50f to .74f, .25f to .89f, .32f to .62f, .09f to .43f, .38f to .39f, .50f to .11f)
+                points.zipWithNext().forEach { (a, b) -> segment(a.first, a.second, b.first, b.second) }
+            }
+            ApGlyphKind.RESTORE -> {
+                segment(.31f, .20f, .13f, .38f)
+                segment(.13f, .38f, .34f, .38f)
+                segment(.13f, .38f, .13f, .18f)
+                drawArc(color, startAngle = -65f, sweepAngle = 305f, useCenter = false,
+                    topLeft = Offset(.19f * u, .19f * u), size = Size(.64f * u, .64f * u), style = line)
+            }
+            ApGlyphKind.PLUS -> {
+                segment(.50f, .16f, .50f, .84f)
+                segment(.16f, .50f, .84f, .50f)
+            }
+            ApGlyphKind.CHECK -> {
+                segment(.18f, .53f, .42f, .75f)
+                segment(.42f, .75f, .84f, .26f)
+            }
+            ApGlyphKind.CLOCK -> {
+                drawCircle(color, radius = .34f * u, center = Offset(.50f * u, .50f * u), style = line)
+                segment(.50f, .29f, .50f, .50f)
+                segment(.50f, .50f, .68f, .61f)
+            }
         }
     }
 }
 
+/** The lower solid face compresses on touch and never uses a blurry shadow. */
 @Composable
 fun ApRaisedButton(
     label: String,
@@ -93,27 +162,38 @@ fun ApRaisedButton(
     modifier: Modifier = Modifier,
     glyph: ApGlyphKind? = null,
     secondary: Boolean = false,
+    enabled: Boolean = true,
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val depth = if (pressed && enabled) 1.dp else 5.dp
+    val topColor = if (secondary) ApPalette.LightSurface else ApColors.Primary
+    val bottomColor = if (secondary) ApPalette.Outline else ApColors.Pressed
     Box(
-        modifier.fillMaxWidth().height(58.dp)
-            .background(if (secondary) Color(0xFFCDE8F8) else ApColors.Pressed, RoundedCornerShape(19.dp))
-            .padding(bottom = 5.dp),
+        modifier.fillMaxWidth().height(60.dp)
+            .background(if (enabled) bottomColor else ApPalette.Outline, RoundedCornerShape(19.dp))
+            .padding(bottom = depth, top = 5.dp - depth),
     ) {
         Button(
             onClick = onClick,
-            modifier = Modifier.fillMaxSize(),
+            enabled = enabled,
+            interactionSource = interaction,
+            modifier = Modifier.fillMaxSize().semantics { contentDescription = label },
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (secondary) Color(0xFFEAF8FF) else ApColors.Primary,
+                containerColor = topColor,
                 contentColor = if (secondary) ApColors.Navy else ApColors.White,
+                disabledContainerColor = ApPalette.Outline,
+                disabledContentColor = ApColors.Navy,
             ),
-            contentPadding = PaddingValues(horizontal = 14.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp),
         ) {
             if (glyph != null) {
-                ApGlyph(glyph, modifier = Modifier.size(22.dp), color = if (secondary) ApColors.Navy else ApColors.White)
+                ApGlyph(glyph, Modifier.size(22.dp), if (secondary) ApColors.Navy else ApColors.White)
                 Spacer(Modifier.width(9.dp))
             }
-            Text(label, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+            Text(label, fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -124,7 +204,7 @@ fun ApCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() ->
         modifier = modifier.fillMaxWidth(),
         color = ApColors.White,
         shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(1.dp, Color(0xFFCDE8F8)),
+        border = BorderStroke(1.dp, ApPalette.Outline),
     ) {
         Column(Modifier.padding(17.dp), content = content)
     }
@@ -132,5 +212,18 @@ fun ApCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() ->
 
 @Composable
 fun ApEyebrow(label: String, modifier: Modifier = Modifier) {
-    Text(label.uppercase(), modifier = modifier, color = ApColors.Pressed, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+    Text(label.uppercase(), modifier = modifier, color = ApColors.Pressed,
+        fontWeight = FontWeight.Black, fontSize = 11.sp, lineHeight = 16.sp, letterSpacing = 1.sp)
+}
+
+/** Reusable visual heading for dashboard, classes and planning without fake actions. */
+@Composable
+fun ApSectionHeading(title: String, description: String? = null, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth()) {
+        Text(title, color = ApColors.Navy, fontSize = 21.sp, lineHeight = 27.sp, fontWeight = FontWeight.Black)
+        if (description != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(description, color = ApColors.Navy, fontSize = 14.sp, lineHeight = 20.sp)
+        }
+    }
 }
