@@ -1,0 +1,27 @@
+name: One-shot fix homonymous student selector
+on:
+  push:
+    branches: [feat/10-files-visual-foundation]
+    paths:
+      - .github/workflows/one-shot-fix-homonym-selector.yml
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/10-files-visual-foundation
+          persist-credentials: true
+      - name: Patch classroom student selector and remove helpers
+        run: |
+          set -euo pipefail
+          python3 tools/one_shot_fix_homonym_selector.py
+          git diff --check
+          git rm .github/workflows/one-shot-fix-homonym-selector.yml tools/one_shot_fix_homonym_selector.py
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(records): select observation student by ID, including namesakes'
+          git push origin HEAD:feat/10-files-visual-foundation
