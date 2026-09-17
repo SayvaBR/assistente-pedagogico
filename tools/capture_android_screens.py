@@ -102,14 +102,31 @@ def tap_tab(label):
     tap(max(candidates, key=lambda pair: pair[0])[1])
 
 
+def visible_anchor(root, anchor):
+    """Screen anchors may contain suffix punctuation, e.g. 'Vamos criar sua turma?'.
+
+    Always match a meaningful whole phrase, not the tiny tab substring that previously
+    allowed duplicate/incorrect captures. A former tuple membership test accidentally
+    required exact equality and rejected the correct destination with a question mark.
+    """
+    needle = anchor.casefold()
+    return any(
+        needle in candidate.casefold()
+        for node in root.iter('node')
+        for candidate in (node.get('text', ''), node.get('content-desc', ''))
+    )
+
+
 def wait_for_text(anchor, timeout=12):
     until = time.monotonic() + timeout
     while time.monotonic() < until:
         root, _ = hierarchy()
-        if any(anchor.casefold() in (node.get('text', '').casefold(), node.get('content-desc', '').casefold()) for node in root.iter('node')):
+        if visible_anchor(root, anchor):
             return
         time.sleep(.7)
-    raise RuntimeError(f'Destination marker {anchor!r} never appeared; refusing to mislabel screenshots')
+    root, _ = hierarchy()
+    visible = [n.get('text', '') for n in root.iter('node') if n.get('text', '')]
+    raise RuntimeError(f'Destination marker {anchor!r} never appeared; actual visible texts: {visible[:36]!r}')
 
 
 def write_field(label, value):
@@ -154,7 +171,7 @@ try:
     tap_text('Frequência', exact=True)
     wait_for_text('Pendentes')
     screenshot('11-frequencia')
-    print('SUCCESS: 11 distinct captures from the running app, verified by screen-specific markers.', flush=True)
+    print('SUCCESS: 11 genuine captures from the running app, verified by screen-specific markers.', flush=True)
 except Exception as error:
     print(f'ANDROID SCREENSHOT FLOW FAILED: {error}', file=sys.stderr, flush=True)
     try:
