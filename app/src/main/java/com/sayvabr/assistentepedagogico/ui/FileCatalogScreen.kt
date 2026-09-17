@@ -139,9 +139,11 @@ fun FileCatalogScreen(
             ),
         )
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = { alphabetical = !alphabetical }, modifier = Modifier.align(Alignment.End)) {
-            Text(if (alphabetical) "Ordem: A–Z · alterar" else "Ordem: recentes · alterar", color = ApColors.Navy,
-                fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { alphabetical = !alphabetical }) {
+                Text(if (alphabetical) "Ordem: A–Z · alterar" else "Ordem: recentes · alterar", color = ApColors.Navy,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.height(9.dp))
 
