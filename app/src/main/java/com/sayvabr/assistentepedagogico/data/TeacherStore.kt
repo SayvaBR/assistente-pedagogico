@@ -187,6 +187,11 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     fun addObservation(classroomId: Long, studentId: Long?, kind: String, body: String, shareApproved: Boolean) {
         require(body.trim().length >= 5) { "Descreva a observação com ao menos 5 caracteres." }
         require(kind in listOf("Comportamento", "Participação", "Aprendizagem", "Outro"))
+        if (studentId != null) {
+            readableDatabase.rawQuery("SELECT 1 FROM students WHERE id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString())).use { c ->
+                require(c.moveToFirst()) { "Aluno não pertence a esta turma." }
+            }
+        }
         writableDatabase.insertOrThrow("observations", null, values("classroom_id" to classroomId, "student_id" to studentId, "kind" to kind, "body" to body.trim(), "day" to LocalDate.now().toString(), "share_approved" to shareApproved))
     }
 

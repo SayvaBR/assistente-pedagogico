@@ -126,6 +126,19 @@ class TeacherStoreInstrumentedTest {
         assertNull(saved.observations.single().studentId)
     }
 
+    @Test fun addObservationRejectsStudentFromAnotherClassroomOrUnknownId() {
+        val first = db()
+        val a = first.createClass("Turma Registro A", "Ensino Fundamental", "Matutino")
+        val b = first.createClass("Turma Registro B", "Ensino Fundamental", "Vespertino")
+        first.addStudent(b, "Karina")
+        val karina = first.read().students.single { it.classroomId == b }.id
+        rejects { first.addObservation(a, karina, "Participação", "Tentativa de registro cruzado.", false) }
+        rejects { first.addObservation(a, 999_999L, "Participação", "Aluno inexistente.", false) }
+        assertTrue(reopen().read().observations.isEmpty())
+        first.addObservation(b, karina, "Participação", "Registro correto na própria turma.", false)
+        assertEquals(1, reopen().read().observations.size)
+    }
+
     @Test fun observationEditAndDeleteAreScopedAndPersist() {
         val first = db()
         val a = first.createClass("Turma Observação A", "Ensino Fundamental", "Matutino")
