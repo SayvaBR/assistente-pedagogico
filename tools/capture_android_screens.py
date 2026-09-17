@@ -51,15 +51,7 @@ def _tap_bounds(bounds):
 
 
 def tap_text(target, exact=False, clickable_only=False):
-    """Tap the first node matching `target`.
-
-    Substring matching across every node's text OR content-desc is unsafe for
-    words that also appear inside body copy (e.g. the bottom-nav tab
-    "Planejamento" also occurs inside Home strings like "Ver planejamento").
-    `exact=True` requires the node's text or content-desc to equal `target`
-    exactly (case-insensitive); `clickable_only=True` additionally requires
-    clickable="true", which is what real tab/button taps should use.
-    """
+    """Tap first matching node. Tab selectors require exact clickable labels."""
     candidates = nodes()
     for item in candidates:
         text = item.get('text', '')
@@ -82,16 +74,17 @@ def tap_text(target, exact=False, clickable_only=False):
 
 
 def tap_tab(label):
-    """Tap a bottom-navigation tab specifically: exact label match on a
-    clickable node, never a substring match against unrelated body text."""
+    """Tap a bottom-navigation tab by exact clickable label, not body copy."""
     tap_text(label, exact=True, clickable_only=True)
 
 
 def wait_for_text(anchor, timeout=6):
-    """Poll the UI hierarchy for `anchor` (exact, case-insensitive) before
-    declaring a navigation successful. Raises instead of assuming the tap
-    landed, per Issue #5: 'se a interação falhar, retornar erro em vez de
-    declarar sucesso'."""
+    """Require a screen-specific visible destination marker, or fail loudly.
+
+    An anchor shared by both the source and destination is not a navigation
+    assertion: e.g. the class list and detail both display the class name,
+    and both the detail tile and attendance editor display 'Frequência'.
+    """
     deadline = time.time() + timeout
     while time.time() < deadline:
         for item in nodes():
@@ -133,10 +126,14 @@ try:
     tap_tab('Turmas')
     wait_for_text('Organize suas classes e alunos')
     tap_text('TurmaTeste', exact=True)
-    wait_for_text('TurmaTeste')
+    # The list already displays 'TurmaTeste', so checking the title alone is a
+    # false positive. 'Sua turma' exists on ClassDetail, not ClassesScreen.
+    wait_for_text('Sua turma')
     screenshot('09-detalhe-turma')
     tap_text('Frequência', exact=True, clickable_only=True)
-    wait_for_text('Frequência')
+    # ClassDetail already has a 'Frequência' action tile. The pending-count
+    # label is specific to AttendanceEditor and verifies the destination.
+    wait_for_text('Pendentes')
     screenshot('10-frequencia')
     print('SUCCESS: ten screens captured from the running Android app.', flush=True)
 except Exception as error:
