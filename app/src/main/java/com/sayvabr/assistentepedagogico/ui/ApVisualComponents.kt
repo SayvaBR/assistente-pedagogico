@@ -164,7 +164,12 @@ fun ApIconBadge(kind: ApGlyphKind, modifier: Modifier = Modifier, emphasized: Bo
 
 /** Consistent blue/white segmented navigation for Dia/Semana/Mês, Todos/Favoritos/Lixeira, etc. */
 @Composable
-fun ApSegmentedControl(options: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+fun ApSegmentedControl(
+    options: List<String>,
+    selected: String,
+    modifier: Modifier = Modifier,
+    onSelect: (String) -> Unit,
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = ApPalette.White,
