@@ -267,8 +267,6 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     /** Former remove action is now reversible; the actual SAF source is never deleted. */
     fun removeFile(fileId: Long) = trashFile(fileId)
 
-    fun addFile(name: String, uri: String) {
-        require(name.isNotBlank() && uri.startsWith("content://")) { "Arquivo inválido." }
-        writableDatabase.insertWithOnConflict("saved_files", null, values("name" to name, "uri" to uri), SQLiteDatabase.CONFLICT_IGNORE)
-    }
+    /** Re-selecting a URI revives trashed references and confirms access without losing metadata. */
+    fun addFile(name: String, uri: String): Long = FileImportPolicy.importReference(writableDatabase, name, uri)
 }
