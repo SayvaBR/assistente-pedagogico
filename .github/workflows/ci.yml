@@ -25,21 +25,5 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # The owner explicitly requested ONE debug preview to review UI and navigation.
-      # Do not publish a release/AAB, merge this draft PR, or claim product acceptance.
-      # Upload the short-lived test APK only when build, unit tests, lint and test compilation pass.
-      - name: Record preview build provenance
-        if: success() && github.event_name == 'pull_request'
-        run: |
-          printf 'TEST PREVIEW ONLY — NOT FOR REAL STUDENT DATA OR PLAY STORE\nCommit: %s\n' "$GITHUB_SHA" > preview-build-info.txt
-          sha256sum app/build/outputs/apk/debug/app-debug.apk >> preview-build-info.txt
-      - name: Upload owner-requested debug preview
-        if: success() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: assistente-pedagogico-debug-preview-${{ github.run_id }}
-          path: |
-            app/build/outputs/apk/debug/app-debug.apk
-            preview-build-info.txt
-          if-no-files-found: error
-          retention-days: 3
+      # Build remains a required quality gate. No APK artifact is uploaded: owner
+      # explicitly postponed the next preview. Re-enable only on new instruction.
