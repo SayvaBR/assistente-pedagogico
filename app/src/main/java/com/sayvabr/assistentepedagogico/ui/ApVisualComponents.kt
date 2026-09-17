@@ -3,14 +3,18 @@ package com.sayvabr.assistentepedagogico.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -105,7 +109,7 @@ fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color:
     }
 }
 
-/** Tactile CTA: solid lower strip only, matching the product rule against soft shadows/gradients. */
+/** Tactile CTA: pressing visibly lowers the face over its solid 5dp strip. No shadow or animation. */
 @Composable
 fun ApRaisedButton(
     label: String,
@@ -114,16 +118,22 @@ fun ApRaisedButton(
     glyph: ApGlyphKind? = null,
     secondary: Boolean = false,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     val base = if (secondary) ApPalette.Outline else ApColors.Pressed
     val face = if (secondary) ApPalette.White else ApColors.Primary
     val content = if (secondary) ApColors.Navy else ApColors.White
     Box(
         modifier.fillMaxWidth().height(60.dp)
             .background(base, RoundedCornerShape(ApShapeToken.Card))
-            .padding(bottom = ApSizeToken.ButtonDepth),
+            .padding(
+                top = if (pressed) ApSizeToken.ButtonDepth else 0.dp,
+                bottom = if (pressed) 0.dp else ApSizeToken.ButtonDepth,
+            ),
     ) {
         Button(
             onClick = onClick,
+            interactionSource = interactionSource,
             modifier = Modifier.fillMaxSize(),
             shape = RoundedCornerShape(ApShapeToken.Medium),
             border = if (secondary) BorderStroke(1.dp, ApPalette.Outline) else null,
@@ -170,7 +180,7 @@ fun ApSegmentedControl(
     onSelect: (String) -> Unit,
 ) = ApSegmentedControl(options, selected, Modifier, onSelect)
 
-/** Consistent blue/white segmented navigation for Dia/Semana/Mês, Todos/Favoritos/Lixeira, etc. */
+/** Selected segment is exposed to TalkBack as selectable, not only through color. */
 @Composable
 fun ApSegmentedControl(
     options: List<String>,
@@ -188,7 +198,8 @@ fun ApSegmentedControl(
             options.forEach { option ->
                 val active = option == selected
                 Surface(
-                    modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget).clickable { onSelect(option) },
+                    modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget)
+                        .selectable(selected = active, onClick = { onSelect(option) }),
                     color = if (active) ApColors.Primary else ApPalette.White,
                     shape = RoundedCornerShape(15.dp),
                 ) {
