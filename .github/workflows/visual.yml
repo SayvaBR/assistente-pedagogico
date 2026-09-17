@@ -1,14 +1,23 @@
 name: Android visual evidence
-# Capturas visuais automáticas por PR suspensas por decisão do titular.
-# A suíte permanece disponível sob demanda para gates relevantes de UX/release.
+# Requested visual gate for this design iteration. Only the isolated visual-integration
+# branch triggers automatically; later PRs still require explicit scope decisions.
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/src/main/java/**/ui/**'
+      - 'tools/capture_android_screens.py'
+      - '.github/workflows/visual.yml'
 permissions:
   contents: read
+concurrency:
+  group: android-visual-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 jobs:
   screenshot:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feat/14-navigation-visual-integration'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -28,7 +37,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Build, install, launch and capture running Android screens
+      - name: Build internally, launch and capture REAL Android screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -37,15 +46,18 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            set -e
+            set -euo pipefail
             gradle --no-daemon :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n com.sayvabr.assistentepedagogico/.MainActivity
+            # Only the debug applicationId has .preview; Activity stays in main namespace.
+            adb shell am start -W -n com.sayvabr.assistentepedagogico.preview/com.sayvabr.assistentepedagogico.MainActivity
             python3 tools/capture_android_screens.py
-      - name: Upload REAL screenshots (including partial evidence if an interaction fails)
+      - name: Upload genuine screenshots, including partial evidence after failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ap-android-real-screenshots
+          name: android-ui-evidence
           path: visual-evidence/*.png
           if-no-files-found: warn
+          retention-days: 3
+      # No APK upload, signed bundle, store publication or use of student records.
