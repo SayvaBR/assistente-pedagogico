@@ -33,7 +33,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing) store.close()
+        // Configuration changes destroy this Activity too. Its replacement owns a new helper;
+        // always close the old connection instead of leaking it until process termination.
+        // A fresh TeacherStore reopens the same private DB without deleting any data.
+        if (::store.isInitialized) store.close()
         super.onDestroy()
     }
 }
