@@ -1,5 +1,5 @@
 name: Android visual evidence
-# Capturas visuais automáticas por PR suspensas por decisão do titular.
+# Capturas visuais automáticas por PR suspensas por decisão da titular.
 # A suíte permanece disponível sob demanda para gates relevantes de UX/release.
 on:
   workflow_dispatch:
@@ -40,7 +40,9 @@ jobs:
             set -e
             gradle --no-daemon :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n com.sayvabr.assistentepedagogico/.MainActivity
+            # Debug has applicationIdSuffix='.preview'; the Activity retains its
+            # original namespace. Starting the release ID fails on clean emulators.
+            adb shell am start -W -n com.sayvabr.assistentepedagogico.preview/com.sayvabr.assistentepedagogico.MainActivity
             python3 tools/capture_android_screens.py
       - name: Upload REAL screenshots (including partial evidence if an interaction fails)
         if: always()
