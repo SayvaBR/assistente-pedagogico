@@ -1,0 +1,29 @@
+name: Quality agent — contracts and workflow safety
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: agent-quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test the auditor with synthetic fixtures
+        run: python3 -m unittest discover -s tools/tests -p 'test_agent_quality.py' -v
+      - name: Validate design-system contracts and workflow safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/agent_quality.py | tee quality-report.txt
+          {
+            echo '## Quality agent (read-only)'
+            echo '```text'
+            cat quality-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
