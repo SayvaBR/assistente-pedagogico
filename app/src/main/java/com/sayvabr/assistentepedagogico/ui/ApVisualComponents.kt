@@ -162,6 +162,14 @@ fun ApIconBadge(kind: ApGlyphKind, modifier: Modifier = Modifier, emphasized: Bo
     ) { Box(contentAlignment = Alignment.Center) { ApGlyph(kind, Modifier.size(29.dp), foreground) } }
 }
 
+/** Convenience overload for the common call style `ApSegmentedControl(options, selected) { ... }`. */
+@Composable
+fun ApSegmentedControl(
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+) = ApSegmentedControl(options, selected, Modifier, onSelect)
+
 /** Consistent blue/white segmented navigation for Dia/Semana/Mês, Todos/Favoritos/Lixeira, etc. */
 @Composable
 fun ApSegmentedControl(
