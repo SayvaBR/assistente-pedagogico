@@ -76,4 +76,43 @@ class TeacherStoreV4MigrationTest {
         reopened.deleteFolder(folder)
         assertNull(reopened.read().files.single { it.id == 13L }.folderId)
     }
+
+    @Test fun reimportLegacyDocumentRestoresTrashAndAccessWithoutLosingOrganization() {
+        store = TeacherStore(context)
+        val first = requireNotNull(store)
+        val folder = first.createFolder("Documentos importantes")
+        first.moveFile(13, folder)
+        first.setFileFavorite(13, true)
+        first.setFileAccessState(13, "revoked")
+        first.trashFile(13)
+        assertEquals(1, first.read().files.size)
+
+        assertEquals(13L, first.addFile("Nome diferente do seletor", "content://synthetic/a"))
+        assertEquals(13L, first.addFile("Importado outra vez", "content://synthetic/a"))
+        val restored = first.libraryFiles().single { it.id == 13L }
+        assertNull(restored.trashedAt)
+        assertEquals(folder, restored.folderId)
+        assertTrue(restored.favorite)
+        assertEquals("Documento A", restored.name) // Keep any teacher-chosen catalog rename.
+        assertEquals("available", restored.accessState)
+        assertEquals(2, first.libraryFiles().size)
+
+        first.close()
+        store = TeacherStore(context)
+        val reopened = requireNotNull(store)
+        assertEquals(restored, reopened.libraryFiles().single { it.id == 13L })
+        assertEquals(2, reopened.read().files.size)
+    }
+
+    @Test fun invalidImportDoesNotEraseOldReferencesAfterUpgrade() {
+        store = TeacherStore(context)
+        val first = requireNotNull(store)
+        val before = first.libraryFiles()
+        try {
+            first.addFile("Documento inseguro", "file:///sdcard/private.txt")
+            fail("Must reject non-SAF URI")
+        } catch (_: IllegalArgumentException) {
+            assertEquals(before, first.libraryFiles())
+        }
+    }
 }
