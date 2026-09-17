@@ -38,8 +38,10 @@ jobs:
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
+          head_sha='${{ github.event.pull_request.head.sha }}'
+          test "$(git rev-parse HEAD)" = "$head_sha"
           printf 'Repository: %s\nPR: %s\nCommit: %s\nPackage: com.sayvabr.assistentepedagogico.preview\nVariant: debug / testing only\n' \
-            "$GITHUB_REPOSITORY" "${{ github.event.pull_request.number }}" "$GITHUB_SHA" > app/build/outputs/apk/debug/BUILD_INFO.txt
+            "$GITHUB_REPOSITORY" '${{ github.event.pull_request.number }}' "$head_sha" > app/build/outputs/apk/debug/BUILD_INFO.txt
           sha256sum "$apk" >> app/build/outputs/apk/debug/BUILD_INFO.txt
       - name: Upload installable preview APK (3-day retention)
         if: github.event_name == 'pull_request' && github.event.pull_request.number == 13
