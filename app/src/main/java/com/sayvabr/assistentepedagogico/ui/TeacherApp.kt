@@ -631,13 +631,34 @@ fun TeacherApp(store: TeacherStore) {
     var body by rememberSaveable(initial?.id) { mutableStateOf(initial?.body.orEmpty()) }
     var approved by rememberSaveable(initial?.id) { mutableStateOf(initial?.shareApproved ?: false) }
     var confirmDeletion by remember { mutableStateOf(false) }
+    var studentPickerExpanded by remember { mutableStateOf(false) }
+    // Names are not unique. Select by stable student ID to avoid attaching a
+    // sensitive pedagogical note to the wrong child when two names match.
+    val classroomStudents = data.students.filter { it.classroomId == classroom.id }
+    val selectedStudent = classroomStudents.firstOrNull { it.id == studentId }
+    fun studentLabel(student: Student): String = if (classroomStudents.count { it.name == student.name } > 1)
+        "${student.name} · cadastro ${student.id}" else student.name
     Heading(if (initial == null) "Nova observação" else "Editar observação", if (initial == null) "Registre uma observação sobre a turma" else "Registro de ${initial.date}", back)
     Panel {
         Text("Aluno (opcional)", fontWeight = FontWeight.Bold, color = ink)
         Spacer(Modifier.height(8.dp))
-        Choices(listOf("Turma inteira") + data.students.filter { it.classroomId == classroom.id }.map { it.name },
-            if (studentId == -1L) "Turma inteira" else data.students.firstOrNull { it.id == studentId }?.name ?: "Turma inteira") { label ->
-            studentId = data.students.firstOrNull { it.classroomId == classroom.id && it.name == label }?.id ?: -1L
+        Box {
+            OutlinedButton(onClick = { studentPickerExpanded = true }, modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)) {
+                Text(selectedStudent?.let(::studentLabel) ?: "Turma inteira", maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded = studentPickerExpanded, onDismissRequest = { studentPickerExpanded = false }) {
+                DropdownMenuItem(text = { Text("Turma inteira") }, onClick = {
+                    studentId = -1L
+                    studentPickerExpanded = false
+                })
+                classroomStudents.forEach { student ->
+                    DropdownMenuItem(text = { Text(studentLabel(student)) }, onClick = {
+                        studentId = student.id
+                        studentPickerExpanded = false
+                    })
+                }
+            }
         }
     }
     Spacer(Modifier.height(11.dp))
