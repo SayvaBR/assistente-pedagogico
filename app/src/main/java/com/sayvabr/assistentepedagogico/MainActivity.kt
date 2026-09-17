@@ -21,8 +21,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // System insets are consumed once at the root; screens own their bottom navigation.
-        // Only this Activity owns the SQLiteOpenHelper; children never close a shared store.
+        // Insets are consumed once at the root; bottom bar owns navigation-bars padding.
+        // The Activity owns the SQLiteOpenHelper. Nested Compose screens share it.
         setContent {
             CompositionLocalProvider(LocalTeacherStore provides store) {
                 ApTheme {
@@ -35,7 +35,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (isFinishing) store.close()
+        // A configuration change destroys this Activity as well: the replacement owns a new
+        // helper. Closing only on isFinishing leaks a connection after every rotation.
+        store.close()
         super.onDestroy()
     }
 }
