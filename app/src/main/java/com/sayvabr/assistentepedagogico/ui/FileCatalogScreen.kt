@@ -24,9 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sayvabr.assistentepedagogico.data.LibraryFile
 import com.sayvabr.assistentepedagogico.data.SavedFile
-import com.sayvabr.assistentepedagogico.data.TeacherStore
 
-/** Offline catalog. A second short-lived helper is used until the central-store callback refactor. */
+/** Offline catalog shares the Activity-owned store; it never creates a second database helper. */
 @Composable
 fun FileCatalogScreen(
     files: List<SavedFile>,
@@ -36,8 +35,7 @@ fun FileCatalogScreen(
     @Suppress("UNUSED_PARAMETER") removeFile: (SavedFile) -> Unit,
 ) {
     val context = LocalContext.current
-    val store = remember(context) { TeacherStore(context) }
-    DisposableEffect(store) { onDispose { store.close() } }
+    val store = LocalTeacherStore.current
     var revision by remember { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
     var alphabetical by rememberSaveable { mutableStateOf(false) }
@@ -54,8 +52,8 @@ fun FileCatalogScreen(
     var nameDraft by rememberSaveable { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
 
-    val catalog = remember(files, revision) { store.libraryFiles() }
-    val folders = remember(files, revision) { store.fileFolders() }
+    val catalog = remember(store, files, revision) { store.libraryFiles() }
+    val folders = remember(store, files, revision) { store.fileFolders() }
     val selected = catalog.firstOrNull { it.id == selectedId }
     val active = catalog.filter { it.trashedAt == null }
     val matches = catalog.filter { file ->
