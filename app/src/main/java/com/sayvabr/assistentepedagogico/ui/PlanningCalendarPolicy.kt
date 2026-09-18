@@ -34,4 +34,12 @@ internal object PlanningCalendarPolicy {
         isoDate >= weekStart(selected).toString() && isoDate <= weekStart(selected).plusDays(6).toString()
     fun matchesMonth(isoDate: String, selected: LocalDate): Boolean =
         isoDate.startsWith(YearMonth.from(selected).toString() + "-")
+
+    /** Calendar grid and its list must use the SAME period; adjacent grid dates do not leak into the month list. */
+    fun inPeriod(isoDate: String, selected: LocalDate, mode: String): Boolean = when (mode) {
+        "Dia" -> matchesDay(isoDate, selected)
+        "Semana" -> matchesWeek(isoDate, selected)
+        "Mês" -> matchesMonth(isoDate, selected)
+        else -> false
+    }
 }
