@@ -1,6 +1,5 @@
 package com.sayvabr.assistentepedagogico.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,7 +29,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Actual calendars are derived from saved SQLite records; no hard-coded demo lessons/events. */
+/** Calendars derive all counts and cards from SQLite snapshots; never from demo data. */
 private val monthLabel = DateTimeFormatter.ofPattern("MMMM 'de' yyyy", Locale("pt", "BR"))
 private val completeDayLabel = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))
 private val weekNames = listOf("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
@@ -134,7 +133,7 @@ private fun WeekStrip(selected: LocalDate, lessonDays: Set<String>, appointmentD
     }
 }
 
-/** Single functional Planning entry: selected day is shared with the editor via its existing callback. */
+/** Main Planning screen; day is shared with lesson/appointment editors and the SAF backup. */
 @Composable
 fun PlanningWorkspace(
     data: TeacherSnapshot,
@@ -146,6 +145,7 @@ fun PlanningWorkspace(
     restoreLesson: (Lesson) -> Unit,
 ) {
     var mode by rememberSaveable { mutableStateOf("Dia") }
+    var backupExpanded by rememberSaveable { mutableStateOf(false) }
     val focus = LocalDate.parse(day)
     val ownLessons = data.lessons.filter { it.classroomId == classroom?.id && !it.archived }
     val lessonDays = ownLessons.map { it.date }.toSet()
@@ -154,6 +154,14 @@ fun PlanningWorkspace(
     ApSectionHeading("Planejamento", classroom?.let { "${it.name} · aulas reais do seu calendário" } ?: "Organize suas turmas e aulas")
     Spacer(Modifier.height(12.dp))
     ApSegmentedControl(listOf("Dia", "Semana", "Mês", "Arquivados"), mode) { mode = it }
+    Spacer(Modifier.height(12.dp))
+    // Accessible even with zero classes, so a new installation can restore its original data.
+    ApRaisedButton(if (backupExpanded) "Ocultar backup e recuperação" else "Backup e recuperação",
+        onClick = { backupExpanded = !backupExpanded }, secondary = true)
+    if (backupExpanded) {
+        Spacer(Modifier.height(10.dp))
+        PlanningBackupPanel()
+    }
     Spacer(Modifier.height(12.dp))
     if (mode != "Arquivados") {
         DateNavigator(focus, mode, onDay)
