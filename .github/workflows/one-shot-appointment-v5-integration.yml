@@ -1,0 +1,47 @@
+name: One-shot appointment v5 integration (self-cleaning)
+on:
+  push:
+    branches: [feat/14-navigation-visual-integration]
+    paths:
+      - .github/workflows/one-shot-appointment-v5-integration.yml
+permissions:
+  contents: write
+concurrency:
+  group: one-shot-appointment-v5-integration
+  cancel-in-progress: false
+jobs:
+  integrate:
+    if: github.repository == 'SayvaBR/assistente-pedagogico' && github.ref == 'refs/heads/feat/14-navigation-visual-integration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          persist-credentials: true
+      - name: Verify blob hashes; patch only intended files; remove temporary tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          store=app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt
+          workspace=app/src/main/java/com/sayvabr/assistentepedagogico/ui/PlanningWorkspace.kt
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if test "$(git hash-object "$app")" = '00cebc3d2f995e710aacc25fb4c55dd8f05c2241' && \
+             test "$(git hash-object "$store")" = 'afb3ef405526d5eaf658560e99b477fbf11139ef' && \
+             test "$(git hash-object "$workspace")" = '7bbd54d20f1f8b0be906903c46032d3d44787651'; then
+            if python3 tools/one_shot_appointment_v5_integration.py; then
+              git add "$app" "$store" "$workspace"
+              echo 'Applied v5 integration to pinned files.'
+            else
+              echo 'Scoped patch aborted; no partial files were written.'
+            fi
+          else
+            echo 'Source changed since inspection: skip patch rather than overwrite concurrent changes.'
+          fi
+          git rm tools/one_shot_appointment_v5_integration.py .github/workflows/one-shot-appointment-v5-integration.yml
+          git diff --cached --check
+          git commit -m 'feat(agenda): integrate validated v5 appointments, migration, editor and existing routes'
+          git push origin HEAD:refs/heads/feat/14-navigation-visual-integration
