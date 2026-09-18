@@ -64,6 +64,19 @@ object TeacherBackupCodec {
         val root = runCatching { JSONObject(payload) }.getOrElse { throw IllegalArgumentException("Backup inválido.", it) }
         require(root.optString("format") == FORMAT) { "Este arquivo não é um backup do Assistente Pedagógico." }
         require(root.optInt("version", -1) == VERSION) { "Versão de backup ainda não suportada." }
+        // Original v1 backups could precede folder organization. Only a truly folderless catalog
+        // may be upgraded implicitly: otherwise a missing folder array would silently discard
+        // references or make restored files point to nonexistent folders.
+        if (!root.has("folders")) {
+            val files = root.optJSONArray("files")
+            require(files != null) { "Backup incompleto: files." }
+            for (index in 0 until files.length()) {
+                require(files.getJSONObject(index).isNull("folderId")) {
+                    "Backup incompleto: há arquivos vinculados a pastas, mas falta o catálogo de pastas."
+                }
+            }
+            root.put("folders", JSONArray())
+        }
         listOf("classrooms", "students", "lessons", "attendance", "observations", "appointments", "files", "folders").forEach {
             require(root.optJSONArray(it) != null) { "Backup incompleto: $it." }
         }
