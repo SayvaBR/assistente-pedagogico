@@ -44,10 +44,22 @@ object LessonPlanV6 {
         require(objective.length >= 5) { "Descreva o objetivo geral da aula." }
         require(content.isNotEmpty()) { "Informe o conteúdo ou objeto de conhecimento." }
         require(method.isNotEmpty()) { "Informe a metodologia ou estratégia de ensino." }
-        val moments = listOf(input.openingMinutes, input.developmentMinutes, input.closingMinutes)
-        require(moments.all { it >= 0 }) { "Os tempos dos momentos da aula não podem ser negativos." }
-        val momentTotal = moments.sum()
-        require(momentTotal == 0 || momentTotal <= input.durationMinutes) {
+
+        // Partial drafts may omit a whole moment, but must never persist a description without
+        // time or a time allocation without instructions. Bound each value before summing to
+        // prevent Int overflow from manually entered durations.
+        listOf(
+            Triple("abertura", input.opening, input.openingMinutes),
+            Triple("desenvolvimento", input.development, input.developmentMinutes),
+            Triple("fechamento", input.closing, input.closingMinutes),
+        ).forEach { (name, description, minutes) ->
+            require(minutes in 0..input.durationMinutes) { "O tempo de $name deve estar entre 0 e a duração total da aula." }
+            require(description.isBlank() == (minutes == 0)) {
+                "Preencha a descrição e o tempo de $name juntos, ou deixe ambos vazios."
+            }
+        }
+        val momentTotal = input.openingMinutes + input.developmentMinutes + input.closingMinutes
+        require(momentTotal <= input.durationMinutes) {
             "A soma dos momentos não pode ultrapassar a duração total da aula."
         }
         val codes = input.bnccCodes.split(',', ';', '\n').map { it.trim() }.filter { it.isNotEmpty() }
