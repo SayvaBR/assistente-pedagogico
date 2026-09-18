@@ -52,6 +52,13 @@ fun LessonEditorV6(
     var showBnccPicker by rememberSaveable { mutableStateOf(false) }
     var catalogue by remember { mutableStateOf<BnccCatalog?>(null) }
 
+    val predictedEnd = remember(time, duration) {
+        runCatching { LessonPlanV6.endTime(time, duration.toIntOrNull() ?: 0) }.getOrNull()
+    }
+    val allocatedMinutes = listOf(openingMinutes, developmentMinutes, closingMinutes)
+        .sumOf { it.toLongOrNull() ?: 0L }
+    val totalMinutes = duration.toLongOrNull() ?: 0L
+
     fun update(old: String, next: String, setter: (String) -> Unit) {
         if (old != next) { setter(next); error = null; onDirty() }
     }
@@ -86,6 +93,12 @@ fun LessonEditorV6(
             }
             Spacer(Modifier.height(9.dp))
             OutlinedTextField(duration, { update(duration, it) { v -> duration = v.filter(Char::isDigit) } }, label = { Text("Duração (min)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (predictedEnd != null) "Término previsto: $predictedEnd" else "Informe início (HH:MM) e duração válida para calcular o término.",
+                color = ApColors.Navy,
+                fontWeight = if (predictedEnd != null) FontWeight.Bold else FontWeight.Normal,
+            )
         }
         Spacer(Modifier.height(12.dp))
         ApCard {
@@ -107,7 +120,7 @@ fun LessonEditorV6(
                     .onSuccess { catalogue = it; error = null; showBnccPicker = true }
                     .onFailure { error = "Catálogo BNCC offline indisponível: ${it.message ?: "verifique a instalação."}" }
             }, glyph = ApGlyphKind.CHECK, secondary = true)
-            Text("Catálogo completo disponível sem internet. Os códigos são conferidos antes de salvar.", color = ApColors.Navy)
+            Text("Catálogo offline de terceiros em auditoria contra os documentos oficiais da BNCC.", color = ApColors.Navy)
             Spacer(Modifier.height(9.dp))
             TextField("Justificativa / contextualização (opcional)", justification, true) { justification = it }
         }
@@ -121,6 +134,12 @@ fun LessonEditorV6(
             TextField("Tempo do desenvolvimento (min)", developmentMinutes) { developmentMinutes = it.filter(Char::isDigit) }
             TextField("Fechamento", closing, true) { closing = it }
             TextField("Tempo do fechamento (min)", closingMinutes) { closingMinutes = it.filter(Char::isDigit) }
+            Text(
+                "Momentos distribuídos: $allocatedMinutes de $totalMinutes min" +
+                    if (allocatedMinutes > totalMinutes) " — ajuste os tempos antes de salvar." else "",
+                color = ApColors.Navy,
+                fontWeight = FontWeight.Bold,
+            )
         }
         Spacer(Modifier.height(12.dp))
         ApCard {
