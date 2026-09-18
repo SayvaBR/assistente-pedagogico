@@ -8,10 +8,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 
-/**
- * Restore a user-selected backup into the existing private database. The UI MUST show a preview
- * and ask for explicit confirmation before calling restoreBackupAfterConfirmation. Every insert
- * runs in one transaction; a failed constraint rolls back the old database in its entirety.
+/** Restore a user-selected backup after preview and explicit confirmation. All inserts share one transaction.
  * Document bytes and SAF permission grants are never transferred by a JSON backup.
  */
 object TeacherBackupRestore {
@@ -121,7 +118,7 @@ object TeacherBackupRestore {
     }
 
     fun restore(db: SQLiteDatabase, payload: String) {
-        require(db.version == LessonActivityV7.VERSION) { "Atualize o banco antes de restaurar." }
+        require(db.version == LessonStatusV8.VERSION) { "Atualize o banco antes de restaurar." }
         // Validation must finish before the first DELETE; malformed input cannot touch current data.
         val records = parse(payload)
         db.beginTransaction()
@@ -134,17 +131,28 @@ object TeacherBackupRestore {
                 "shift" to it.required("shift"), "archived" to it.optBoolean("archived", false))) }
             records.students.forEach { db.insertOrThrow("students", null, values(
                 "id" to it.id(), "classroom_id" to it.id("classroomId"), "name" to it.required("name"))) }
-            records.lessons.forEach { db.insertOrThrow("lessons", null, values(
-                "id" to it.id(), "classroom_id" to it.id("classroomId"), "title" to it.required("title"),
-                "subject" to it.required("subject"), "day" to it.required("date"), "time" to it.required("time"),
-                "duration_minutes" to it.optInt("durationMinutes", 50), "objective" to it.required("objective"),
-                "specific_objectives" to it.optional("specificObjectives"), "content" to it.required("content"),
-                "bncc_codes" to it.optional("bnccCodes"), "justification" to it.optional("justification"),
-                "method" to it.required("method"), "opening" to it.optional("opening"),
-                "opening_minutes" to it.optInt("openingMinutes", 0), "development" to it.optional("development"),
-                "development_minutes" to it.optInt("developmentMinutes", 0), "closing" to it.optional("closing"),
-                "closing_minutes" to it.optInt("closingMinutes", 0), "assessment" to it.optional("assessment"),
-                "adaptations" to it.optional("adaptations"), "archived" to it.optBoolean("archived", false))) }
+            records.lessons.forEach { lesson ->
+                val legacyArchived = lesson.optBoolean("archived", false)
+                val status = if (lesson.has("pedagogicalStatus")) LessonStatus.parse(lesson.getString("pedagogicalStatus"))
+                    else if (legacyArchived) LessonStatus.ARCHIVED else LessonStatus.DRAFT
+                val previous = if (lesson.has("statusBeforeArchive")) LessonStatus.parse(lesson.getString("statusBeforeArchive"))
+                    else LessonStatus.DRAFT
+                require(previous != LessonStatus.ARCHIVED && (status == LessonStatus.ARCHIVED) == legacyArchived) {
+                    "Estado pedagógico inconsistente no backup."
+                }
+                db.insertOrThrow("lessons", null, values(
+                    "id" to lesson.id(), "classroom_id" to lesson.id("classroomId"), "title" to lesson.required("title"),
+                    "subject" to lesson.required("subject"), "day" to lesson.required("date"), "time" to lesson.required("time"),
+                    "duration_minutes" to lesson.optInt("durationMinutes", 50), "objective" to lesson.required("objective"),
+                    "specific_objectives" to lesson.optional("specificObjectives"), "content" to lesson.required("content"),
+                    "bncc_codes" to lesson.optional("bnccCodes"), "justification" to lesson.optional("justification"),
+                    "method" to lesson.required("method"), "opening" to lesson.optional("opening"),
+                    "opening_minutes" to lesson.optInt("openingMinutes", 0), "development" to lesson.optional("development"),
+                    "development_minutes" to lesson.optInt("developmentMinutes", 0), "closing" to lesson.optional("closing"),
+                    "closing_minutes" to lesson.optInt("closingMinutes", 0), "assessment" to lesson.optional("assessment"),
+                    "adaptations" to lesson.optional("adaptations"), "archived" to legacyArchived,
+                    "pedagogical_status" to status.value, "status_before_archive" to previous.value))
+            }
             // Insert after classrooms and lessons: SQLite FKs and explicit class ownership are validated.
             records.activities.forEach { db.insertOrThrow("lesson_activities", null, values(
                 "id" to it.id(), "classroom_id" to it.id("classroomId"),
