@@ -82,6 +82,23 @@ class TeacherBackupV7ActivitiesInstrumentedTest {
         assertEquals(2, reopened.read().lessons.size)
     }
 
+    @Test fun restoreMustBeExplicitlyConfirmedAndNeverChangesTheCurrentDatabaseOtherwise() {
+        val f = populate()
+        val s = requireNotNull(store)
+        val backup = s.exportBackupPayload()
+        val extraId = s.saveActivity(LessonActivityV7.Input(f.other, f.foreignLesson,
+            "Atividade atual que não está no backup", "Este trabalho ainda não foi exportado.", 20))
+        val before = s.listActivities(f.classroom) + s.listActivities(f.other)
+        assertEquals(2, TeacherBackupRestore.preview(backup).activities)
+        assertThrows(IllegalArgumentException::class.java) {
+            s.restoreBackupAfterConfirmation(backup, confirmed = false)
+        }
+        assertEquals(before, s.listActivities(f.classroom) + s.listActivities(f.other))
+        assertEquals(3, s.listActivities(f.classroom).size + s.listActivities(f.other).size)
+        assertEquals(extraId, s.listActivities(f.other).single().id)
+        assertEquals(2, s.read().lessons.size)
+    }
+
     @Test fun foreignLessonAndCorruptActivityArrayAreRejectedBeforeTouchingDatabase() {
         val f = populate()
         val s = requireNotNull(store)
