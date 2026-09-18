@@ -1,25 +1,25 @@
-# Estado verificável — 18/09/2026
+# Estado verificável — Planejamento, 18/09/2026
 
-**Repositório exclusivo:** `SayvaBR/assistente-pedagogico` (Kotlin/Jetpack Compose, SQLite offline). **Frente ativa:** [PR #15](https://github.com/SayvaBR/assistente-pedagogico/pull/15), aberta como **DRAFT**, empilhada sobre PR #13. PR #2 e o estado de 16/09 não representam o HEAD atual. Não fazer merge para `main`, gerar APK/AAB/release, publicar na Play Store nem capturas de tela automáticas sem autorização expressa da titular. Dados de teste exclusivamente sintéticos; nenhum banco de escola ou aluno real em dispositivos de teste.
+**Repositório:** `SayvaBR/assistente-pedagogico` (Kotlin/Jetpack Compose, SQLite offline). **Trabalho ativo:** [PR #15](https://github.com/SayvaBR/assistente-pedagogico/pull/15), aberta como **DRAFT** e empilhada sobre PR #13. Não fazer merge para `main`, gerar APK/AAB/release, publicar na Play Store nem capturas automáticas sem autorização. Testes que reiniciam banco rodam apenas em emulador descartável com dados sintéticos.
 
-## Planejamento — situação e evidência
+## Funcionalidade implementada
 
-- Disponíveis: calendário por dia, semana e mês, seleção de turma e data; agenda e compromissos CRUD; planos de aula com campos profissionais e momentos/tempos; busca BNCC offline; atividades reutilizáveis e vinculadas; estados rascunho/pronto/concluído/arquivado; duplicação transacional de plano e atividades; controle de colisão entre planos e compromissos; backup/restauração SAF com prévia e confirmação explícita.
-- A base `5e917a2` passou nos três gates: [Android CI](https://github.com/SayvaBR/assistente-pedagogico/actions/runs/35375700683), [Quality](https://github.com/SayvaBR/assistente-pedagogico/actions/runs/35375700885) e [emulador](https://github.com/SayvaBR/assistente-pedagogico/actions/runs/35375700738). Esses resultados cobrem restauração dos editores, recriação real da MainActivity e leitura/gravação em documento sintético via ContentResolver, mas **não** a interação visual do seletor de arquivos.
-- Após a base aprovada: corrigido padding de barra inferior em todas as rotas (`8b5c13d`); preservadas seleções BNCC provisórias na rotação e isolado o filtro de ano por etapa (`2165891`); adicionados testes para seleção BNCC e alcance dos botões de salvar após digitação (`75eae3b`, `71e1995`). **Verificar CI e emulador destes commits antes de declarar aprovada a rodada nova.**
-- Fonte BNCC: snapshot terceirizado `dados-2026.07.1`, 1.721 entradas (141 Computação). Contagem e estrutura automatizadas; textos e metadados ainda **não auditados integralmente** contra MEC/CNE. Veja `docs/PLANEJAMENTO_BNCC_AUDITORIA.md`. A UI não deve anunciar homologação MEC.
-- Estimativas internas anteriores (não métricas): **82% funcional, 40% visual**. Não alterá-las sem novos gates, verificação de aparelho e aceite funcional.
+- Planejamento Dia/Semana/Mês, agenda, planos de aula, atividades vinculadas, estados rascunho/pronto/concluído/arquivado, duplicação com atividades, backup/restauração por SAF e proteção de navegação/áreas seguras.
+- Construtor de planos v9 funcional na interface: seções nativas ordenáveis, seções personalizadas com texto próprio, inclusão/remoção de blocos opcionais e modelos reutilizáveis que não copiam o texto de aulas anteriores. Campos canônicos e estrutura são gravados na mesma transação SQLite; a migração v8→v9 é aditiva e o backup mantém compatibilidade.
+- A renomeação das seções usa confirmação explícita: permite apagar o nome antigo e digitar outro, mas impede salvar títulos com menos de 2 caracteres. O teste específico verifica validação e cancelamento.
+- A seleção BNCC utiliza um **snapshot offline de fonte independente**, não uma API remota em tempo real. Por decisão da titular, serve de referência pedagógica; auditoria editorial individual das 1.719 habilidades restantes não é bloqueio. Permanecem testes de seleção, persistência, integridade de códigos e indisponibilidade. Não afirmar homologação MEC; detalhes em `docs/PLANEJAMENTO_BNCC_AUDITORIA.md`.
 
-## Pendências críticas do Planejamento (sem maquiagem de 100%)
+## Evidências e verificação
 
-- [ ] Gates completos para o HEAD da rodada atual; resolver falhas e registrar número de testes e evidência.
-- [ ] Homologar teclado real, rotação, área segura superior/inferior, navegação gestual/Voltar, retomada e encerramento do processo em Android físico — sem capturas automáticas.
-- [ ] Validar escolha visual `CreateDocument`/`OpenDocument`, permissões, cancelamento e ausência de sobrescrita sem consentimento. O round-trip por URI já é coberto separadamente.
-- [ ] Conferir códigos, texto, etapas, anos, Computação e localizadores de todas as 1.721 entradas BNCC contra documentos oficiais; documentar diferenças antes de anunciar dataset verificado.
-- [ ] Aceite da titular do fluxo real Planejamento. Depois, executar refinamento visual e Lucide seguindo design azul/branco.
+- O HEAD `d2287b1bc99b3e142edfb25ee554d4c162275add` passou [Android CI](https://github.com/SayvaBR/assistente-pedagogico/actions/runs/35394835459), [Quality](https://github.com/SayvaBR/assistente-pedagogico/actions/runs/35394835441) e [emulador/persistência](https://github.com/SayvaBR/assistente-pedagogico/actions/runs/35394835493). Estes links **não** comprovam o estado de commits posteriores.
+- Rodada posterior adicionou a janela de renomeação, ajustou testes de navegação/Voltar/teclado, adicionou teste integrado que edita, salva, reabre e duplica um plano com seção personalizada (`PlanningComposerEndToEndInstrumentedTest.kt`) e atualizou a comunicação BNCC e a documentação. Verificar os workflows do HEAD final desta rodada antes de declarar os novos testes aprovados; não tratar execução em andamento como sucesso.
+- Testes em emulador não substituem teste no aparelho da titular, especialmente o seletor de documentos do sistema e teclado real.
 
-## Demais áreas e lançamento
+## Critérios restantes para concluir esta frente
 
-Turmas/alunos, frequência, observações, Arquivos e Mais permanecem frentes de produto separadas; a aprovação do Planejamento não equivale ao aplicativo pronto. Segurança/privacidade, eventuais assinaturas/Play Billing, geração e assinatura de release, revisão comercial e publicação na Play Store exigem gates próprios e autorização. **Auditoria específica de acessibilidade foi retirada do escopo desta rodada a pedido da titular**; requisitos essenciais de uso Android como botão Voltar, teclado e áreas seguras permanecem.
+1. Obter os três gates verdes no HEAD final da rodada, investigar falhas reais e corrigir antes do aceite.
+2. Validar em Android físico, somente com dados fictícios: criar/editar/reabrir/duplicar plano, salvar e descartar rascunho, backup/exportação/importação SAF, seleção BNCC, Voltar, rotação, teclado e insets superior/inferior. Sem afirmar aceite sem teste da titular.
+3. Refinar as telas de Planejamento segundo a identidade azul/branco aprovada, ícones Lucide e qualidade de interação, preservando a funcionalidade. Capturas apenas quando expressamente necessárias/autorizadas.
+4. Play Store, cobrança, segurança/privacidade e lançamento têm gates próprios fora desta PR. O restante do produto não se torna pronto automaticamente quando o Planejamento é aprovado.
 
-Os links acima são evidências de um commit anterior; a PR e seus checks atuais são a fonte de verdade para o HEAD. CI verde isolado não representa produto concluído.
+**Sem merge e sem percentual calculado por número de commits.** Os checks correntes da PR são a fonte da verdade para o HEAD.
