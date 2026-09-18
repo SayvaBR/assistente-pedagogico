@@ -62,7 +62,7 @@ class TeacherStoreV6MigrationTest {
     @Test fun v5ToV6KeepsAllRecordsAndAddsSafeLessonDefaultsAcrossReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(LessonPlanV6.VERSION, first.readableDatabase.version)
+        assertEquals(LessonActivityV7.VERSION, first.readableDatabase.version)
         val snapshot = first.read()
         assertEquals("Docente Fictícia", snapshot.profile?.name)
         assertEquals(31L, snapshot.classrooms.single().id)
@@ -104,7 +104,7 @@ class TeacherStoreV6MigrationTest {
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(LessonPlanV6.VERSION, reopened.readableDatabase.version)
+        assertEquals(LessonActivityV7.VERSION, reopened.readableDatabase.version)
         assertEquals(snapshot, reopened.read())
     }
 }

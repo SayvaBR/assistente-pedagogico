@@ -36,7 +36,7 @@ data class TeacherSnapshot(
     val folders: List<FileFolder> = emptyList(),
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, LessonPlanV6.VERSION) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, LessonActivityV7.VERSION) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -53,11 +53,12 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         FileLibraryV4.migrate(db)
         AppointmentV5.migrate(db)
         LessonPlanV6.migrate(db)
+        LessonActivityV7.migrate(db)
     }
 
     /** SQLiteOpenHelper wraps onUpgrade in a transaction, rolling back every ALTER on failure. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..5 && newVersion == LessonPlanV6.VERSION) {
+        require(oldVersion in 1..6 && newVersion == LessonActivityV7.VERSION) {
             "Unsupported database migration from $oldVersion to $newVersion"
         }
         if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
@@ -65,6 +66,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         if (oldVersion < 4) FileLibraryV4.migrate(db)
         if (oldVersion < 5) AppointmentV5.migrate(db)
         if (oldVersion < 6) LessonPlanV6.migrate(db)
+        if (oldVersion < 7) LessonActivityV7.migrate(db)
     }
 
     fun read(): TeacherSnapshot {
@@ -93,6 +95,17 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         }
         return TeacherSnapshot(profile, classrooms, students, lessons, attendance, observations, appointments, files, FileLibraryV4.folders(db))
     }
+
+    /** Planning activities share this Activity-owned SQLite helper, never a second connection. */
+    fun listActivities(classroomId: Long, lessonId: Long? = null): List<LessonActivityV7.Activity> =
+        LessonActivityV7.list(readableDatabase, classroomId, lessonId)
+    fun saveActivity(input: LessonActivityV7.Input): Long = LessonActivityV7.create(writableDatabase, input)
+    fun updateActivity(activityId: Long, input: LessonActivityV7.Input) =
+        LessonActivityV7.update(writableDatabase, activityId, input)
+    fun duplicateActivity(classroomId: Long, activityId: Long, targetLessonId: Long? = null): Long =
+        LessonActivityV7.duplicate(writableDatabase, classroomId, activityId, targetLessonId)
+    fun deleteActivity(classroomId: Long, activityId: Long) =
+        LessonActivityV7.delete(writableDatabase, classroomId, activityId)
 
     /** This is the only source of trashed catalog references; normal snapshots hide the trash. */
     fun libraryFiles(): List<LibraryFile> = FileLibraryV4.files(readableDatabase)
