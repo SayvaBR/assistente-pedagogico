@@ -18,7 +18,11 @@ class PlanningContractTest(unittest.TestCase):
         self.assertIn('data.lessons.filter', workspace)
         self.assertIn('data.appointments.filter', workspace)
         self.assertIn('MonthGrid(focus, lessonDays, appointmentDays, onDay)', workspace)
-        self.assertIn('PlanningCalendarPolicy.matchesWeek', workspace)
+        # Both lesson lists and Agenda must consult one day/week/month policy, not a day-only fallback.
+        self.assertGreaterEqual(workspace.count('PlanningCalendarPolicy.inPeriod('), 3)
+        self.assertIn('"Mês" -> "Aulas de', workspace)
+        self.assertIn('"Mês" -> "Agenda de', workspace)
+        self.assertIn('shownAppointments.forEach', workspace)
         self.assertNotIn('1000273178', workspace)  # Reference image is design input, never demo data.
 
     def test_old_patch_workflow_removed_and_date_rules_have_tests(self):
@@ -28,8 +32,11 @@ class PlanningContractTest(unittest.TestCase):
         unit = (ROOT / 'app/src/test/java/com/sayvabr/assistentepedagogico/ui/PlanningCalendarPolicyTest.kt').read_text(encoding='utf-8')
         self.assertIn('fun monthCells', policy)
         self.assertIn('fun shiftMonth', policy)
+        self.assertIn('fun inPeriod', policy)
+        self.assertIn('"Mês" -> matchesMonth', policy)
         self.assertIn('leapFebruaryHasAllDaysAndMondayFirstCells', unit)
         self.assertIn('monthsThatNeedSixRowsDoNotLoseDates', unit)
+        self.assertIn('monthListingIncludesEntireSelectedMonthButNeverAdjacentCalendarCells', unit)
 
 
 if __name__ == '__main__':
