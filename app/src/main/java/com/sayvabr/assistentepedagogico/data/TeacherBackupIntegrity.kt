@@ -75,6 +75,43 @@ internal object TeacherBackupIntegrity {
             }
         }
 
+        // Reject wrong ownership and malformed activities BEFORE the restore transaction.
+        val knownClassrooms = mutableSetOf<Long>()
+        root.getJSONArray("classrooms").let { rooms ->
+            for (index in 0 until rooms.length()) {
+                require(knownClassrooms.add(rooms.getJSONObject(index).getLong("id"))) {
+                    "Backup contém turmas com IDs duplicados."
+                }
+            }
+        }
+        val lessonOwners = mutableMapOf<Long, Long>()
+        for (index in 0 until lessons.length()) {
+            val lesson = lessons.getJSONObject(index)
+            require(lessonOwners.put(lesson.getLong("id"), lesson.getLong("classroomId")) == null) {
+                "Backup contém planos com IDs duplicados."
+            }
+        }
+        val activities = root.getJSONArray("activities")
+        val activityIds = mutableSetOf<Long>()
+        for (index in 0 until activities.length()) {
+            val activity = activities.getJSONObject(index)
+            val id = activity.getLong("id")
+            val classroomId = activity.getLong("classroomId")
+            val lessonId = if (activity.isNull("lessonId")) null else activity.getLong("lessonId")
+            require(id > 0 && activityIds.add(id)) { "Backup contém atividades com IDs inválidos ou duplicados." }
+            require(classroomId in knownClassrooms) { "Atividade vinculada a turma inexistente no backup." }
+            require(lessonId == null || lessonOwners[lessonId] == classroomId) {
+                "Atividade vinculada a plano de outra turma ou inexistente no backup."
+            }
+            LessonActivityV7.validated(LessonActivityV7.Input(
+                classroomId = classroomId,
+                lessonId = lessonId,
+                title = activity.getString("title"),
+                instructions = activity.getString("instructions"),
+                durationMinutes = activity.getInt("durationMinutes"),
+            ))
+        }
+
         // Older backups legitimately do not know an appointment's duration (end == start).
         // A recorded end before start, however, must never be restored as a valid appointment.
         val appointments = root.getJSONArray("appointments")

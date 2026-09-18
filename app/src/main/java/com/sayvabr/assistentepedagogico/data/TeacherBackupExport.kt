@@ -21,5 +21,6 @@ fun TeacherStore.exportBackupPayload(): String {
             accessState = "revoked",
         )
     }
-    return TeacherBackupCodec.encode(snapshot.copy(files = fullCatalog))
+    val activities = snapshot.classrooms.flatMap { listActivities(it.id) }
+    return TeacherBackupCodec.encode(snapshot.copy(files = fullCatalog), activities)
 }

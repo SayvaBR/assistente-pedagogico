@@ -16,15 +16,16 @@ import java.time.LocalTime
  */
 object TeacherBackupRestore {
     data class Preview(val classrooms: Int, val students: Int, val lessons: Int,
-        val attendance: Int, val observations: Int, val appointments: Int, val files: Int)
+        val attendance: Int, val observations: Int, val appointments: Int, val files: Int, val activities: Int = 0)
 
     private data class Payload(
         val profile: JSONObject?, val classrooms: List<JSONObject>, val students: List<JSONObject>,
         val lessons: List<JSONObject>, val attendance: List<JSONObject>, val observations: List<JSONObject>,
         val appointments: List<JSONObject>, val folders: List<JSONObject>, val files: List<JSONObject>,
+        val activities: List<JSONObject>,
     ) {
         fun preview() = Preview(classrooms.size, students.size, lessons.size, attendance.size,
-            observations.size, appointments.size, files.size)
+            observations.size, appointments.size, files.size, activities.size)
     }
 
     private fun JSONArray.rows(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
@@ -55,11 +56,13 @@ object TeacherBackupRestore {
             appointments = root.getJSONArray("appointments").rows(),
             folders = root.getJSONArray("folders").rows(),
             files = root.getJSONArray("files").rows(),
+            activities = root.getJSONArray("activities").rows(),
         )
         result.profile?.required("name")
         val classes = result.classrooms.uniqueIds("Turmas")
         val students = result.students.uniqueIds("Alunos")
         result.lessons.uniqueIds("Planos")
+        result.activities.uniqueIds("Atividades")
         result.observations.uniqueIds("Observações")
         result.appointments.uniqueIds("Compromissos")
         val folders = result.folders.uniqueIds("Pastas")
@@ -118,12 +121,12 @@ object TeacherBackupRestore {
     }
 
     fun restore(db: SQLiteDatabase, payload: String) {
-        require(db.version == LessonPlanV6.VERSION) { "Atualize o banco antes de restaurar." }
+        require(db.version == LessonActivityV7.VERSION) { "Atualize o banco antes de restaurar." }
         // Validation must finish before the first DELETE; malformed input cannot touch current data.
         val records = parse(payload)
         db.beginTransaction()
         try {
-            listOf("attendance", "observations", "lessons", "students", "appointments", "saved_files",
+            listOf("lesson_activities", "attendance", "observations", "lessons", "students", "appointments", "saved_files",
                 "file_folders", "classrooms", "profile").forEach { db.delete(it, null, null) }
             records.profile?.let { db.insertOrThrow("profile", null, values("id" to 1, "name" to it.required("name"))) }
             records.classrooms.forEach { db.insertOrThrow("classrooms", null, values(
@@ -142,6 +145,11 @@ object TeacherBackupRestore {
                 "development_minutes" to it.optInt("developmentMinutes", 0), "closing" to it.optional("closing"),
                 "closing_minutes" to it.optInt("closingMinutes", 0), "assessment" to it.optional("assessment"),
                 "adaptations" to it.optional("adaptations"), "archived" to it.optBoolean("archived", false))) }
+            // Insert after classrooms and lessons: SQLite FKs and explicit class ownership are validated.
+            records.activities.forEach { db.insertOrThrow("lesson_activities", null, values(
+                "id" to it.id(), "classroom_id" to it.id("classroomId"),
+                "lesson_id" to it.optionalId("lessonId"), "title" to it.required("title"),
+                "instructions" to it.required("instructions"), "duration_minutes" to it.getInt("durationMinutes"))) }
             records.attendance.forEach { db.insertOrThrow("attendance", null, values(
                 "classroom_id" to it.id("classroomId"), "student_id" to it.id("studentId"),
                 "day" to it.required("date"), "status" to it.required("status"))) }

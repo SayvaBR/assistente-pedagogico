@@ -13,7 +13,7 @@ object TeacherBackupCodec {
     // existing v1 files remain readable because the envelope version did not change.
     const val VERSION = 1
 
-    fun encode(snapshot: TeacherSnapshot): String = JSONObject().apply {
+    fun encode(snapshot: TeacherSnapshot, activities: List<LessonActivityV7.Activity> = emptyList()): String = JSONObject().apply {
         put("format", FORMAT)
         put("version", VERSION)
         put("profile", snapshot.profile?.let { JSONObject().put("name", it.name) } ?: JSONObject.NULL)
@@ -32,6 +32,12 @@ object TeacherBackupCodec {
             put("development", l.development); put("developmentMinutes", l.developmentMinutes)
             put("closing", l.closing); put("closingMinutes", l.closingMinutes)
             put("assessment", l.assessment); put("adaptations", l.adaptations); put("archived", l.archived)
+        }) } })
+        put("activities", JSONArray().apply { activities.forEach { activity -> put(JSONObject().apply {
+            put("id", activity.id); put("classroomId", activity.classroomId)
+            put("lessonId", activity.lessonId ?: JSONObject.NULL)
+            put("title", activity.title); put("instructions", activity.instructions)
+            put("durationMinutes", activity.durationMinutes)
         }) } })
         put("attendance", JSONArray().apply { snapshot.attendance.forEach { a -> put(JSONObject().apply {
             put("classroomId", a.classroomId); put("studentId", a.studentId); put("date", a.date); put("status", a.status)
@@ -77,7 +83,10 @@ object TeacherBackupCodec {
             }
             root.put("folders", JSONArray())
         }
-        listOf("classrooms", "students", "lessons", "attendance", "observations", "appointments", "files", "folders").forEach {
+        // Backups created before activity support legitimately have no activities list.
+        // A present but non-array field is corrupt and must be rejected, never ignored.
+        if (!root.has("activities")) root.put("activities", JSONArray())
+        listOf("classrooms", "students", "lessons", "activities", "attendance", "observations", "appointments", "files", "folders").forEach {
             require(root.optJSONArray(it) != null) { "Backup incompleto: $it." }
         }
         TeacherBackupIntegrity.validate(root)
