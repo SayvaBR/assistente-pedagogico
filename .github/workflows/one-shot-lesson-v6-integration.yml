@@ -1,0 +1,30 @@
+name: One-shot lesson v6 integration
+on:
+  push:
+    branches: [feat/14-navigation-visual-integration]
+    paths:
+      - .github/workflows/one-shot-lesson-v6-integration.yml
+permissions:
+  contents: write
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          persist-credentials: true
+      - name: Apply guarded lesson v6 integration and self-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt)" = '331e37c99f62281eb14121f340c56c6c6b08b23a'
+          python3 tools/one_shot_lesson_v6_integration.py
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/sayvabr/assistentepedagogico/data/TeacherStore.kt
+          git rm tools/one_shot_lesson_v6_integration.py .github/workflows/one-shot-lesson-v6-integration.yml
+          git commit -m 'feat(planning): integrate rich lesson plan v6 persistence'
+          git push origin HEAD:refs/heads/feat/14-navigation-visual-integration
