@@ -3,9 +3,7 @@ package com.sayvabr.assistentepedagogico.data
 import org.json.JSONObject
 import java.time.LocalTime
 
-/** Additional semantic validation before the restore transaction is allowed to replace any records.
- * Foreign keys alone cannot detect a valid student ID belonging to the wrong classroom.
- */
+/** Semantic validation before the restore transaction replaces any records. */
 internal object TeacherBackupIntegrity {
     fun validate(root: JSONObject) {
         val students = root.getJSONArray("students")
@@ -39,7 +37,7 @@ internal object TeacherBackupIntegrity {
             }
         }
 
-        // Validate the same moment invariants as the editor BEFORE restoring a backup.
+        // Validate timing and states BEFORE restoring a backup.
         val lessons = root.getJSONArray("lessons")
         for (index in 0 until lessons.length()) {
             val lesson = lessons.getJSONObject(index)
@@ -63,10 +61,23 @@ internal object TeacherBackupIntegrity {
                     "O momento de $label deve ter descrição e tempo juntos no backup."
                 }
             }
+            val legacyArchived = lesson.optBoolean("archived", false)
+            val status = if (lesson.has("pedagogicalStatus")) LessonStatus.parse(lesson.getString("pedagogicalStatus"))
+                else if (legacyArchived) LessonStatus.ARCHIVED else LessonStatus.DRAFT
+            val previous = if (lesson.has("statusBeforeArchive")) LessonStatus.parse(lesson.getString("statusBeforeArchive"))
+                else LessonStatus.DRAFT
+            require(previous != LessonStatus.ARCHIVED && legacyArchived == (status == LessonStatus.ARCHIVED)) {
+                "Estado pedagógico e arquivamento inconsistentes no backup."
+            }
+            val effective = if (status == LessonStatus.ARCHIVED) previous else status
+            if (effective == LessonStatus.READY || effective == LessonStatus.COMPLETED) {
+                require(listOf("title", "subject", "objective", "content", "method", "opening", "development", "closing")
+                    .all { lesson.optString(it, "").isNotBlank() } && listOf(opening, development, closing).all { it > 0L }) {
+                    "Plano pronto ou concluído está incompleto no backup."
+                }
+            }
 
-            // v5 plans never had a duration. On migrating to v6 the database assigns 50 minutes,
-            // and the exporter includes that default even if a late-day legacy plan was valid.
-            // Keep those exact, otherwise-unenriched records restorable instead of losing them.
+            // A legacy v5 plan never had duration; retain otherwise-unenriched late-day records.
             val isLegacyDefault = duration == 50 && opening == 0L && development == 0L && closing == 0L &&
                 listOf("specificObjectives", "bnccCodes", "justification", "opening", "development",
                     "closing", "assessment", "adaptations").all { lesson.optString(it, "").isBlank() }
@@ -75,7 +86,6 @@ internal object TeacherBackupIntegrity {
             }
         }
 
-        // Reject wrong ownership and malformed activities BEFORE the restore transaction.
         val knownClassrooms = mutableSetOf<Long>()
         root.getJSONArray("classrooms").let { rooms ->
             for (index in 0 until rooms.length()) {
@@ -112,8 +122,6 @@ internal object TeacherBackupIntegrity {
             ))
         }
 
-        // Older backups legitimately do not know an appointment's duration (end == start).
-        // A recorded end before start, however, must never be restored as a valid appointment.
         val appointments = root.getJSONArray("appointments")
         for (index in 0 until appointments.length()) {
             val appointment = appointments.getJSONObject(index)
