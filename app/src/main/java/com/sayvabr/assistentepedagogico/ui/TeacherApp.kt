@@ -279,6 +279,9 @@ fun TeacherApp(store: TeacherStore) {
                                     store.updateLesson(lessonClass.id, lesson.id, input)
                                 } },
                                 archive = { commit("planning") { store.setLessonArchived(lessonClass.id, lesson.id, true) } },
+                                duplicate = { commit("planning", onSuccess = { selectedDay = lesson.date }) {
+                                    store.duplicateLesson(lessonClass.id, lesson.id)
+                                } },
                                 onDirty = { formDirty = true })
                         }
                     } ?: Panel { Text("Plano indisponível. Retorne ao Planejamento.", color = ink); PrimaryButton("Voltar ao planejamento") { navigate("planning", root = true) } }

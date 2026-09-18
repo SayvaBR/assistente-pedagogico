@@ -27,6 +27,7 @@ fun LessonEditorV6(
     back: () -> Unit,
     save: (LessonPlanV6.Input) -> Unit,
     archive: (() -> Unit)? = null,
+    duplicate: (() -> Unit)? = null,
     onDirty: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -51,6 +52,7 @@ fun LessonEditorV6(
     var adaptations by rememberSaveable(initial?.id) { mutableStateOf(initial?.adaptations.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmArchive by remember { mutableStateOf(false) }
+    var confirmDuplicate by remember { mutableStateOf(false) }
     var showBnccPicker by rememberSaveable { mutableStateOf(false) }
     var catalogue by remember { mutableStateOf<BnccCatalog?>(null) }
 
@@ -187,6 +189,10 @@ fun LessonEditorV6(
                 }.onFailure { error = it.message ?: "Não foi possível compartilhar este plano." }
             }, glyph = ApGlyphKind.DOCUMENT, secondary = true)
             Text("A prévia contém os campos atuais. Compartilhar não salva alterações no aplicativo.", color = ApColors.Navy)
+            if (duplicate != null) {
+                Spacer(Modifier.height(10.dp))
+                ApRaisedButton("Duplicar plano e atividades", onClick = { confirmDuplicate = true }, glyph = ApGlyphKind.PLUS, secondary = true)
+            }
             if (archive != null) {
                 Spacer(Modifier.height(10.dp))
                 ApRaisedButton("Arquivar plano", onClick = { confirmArchive = true }, glyph = ApGlyphKind.FOLDER, secondary = true)
@@ -210,5 +216,12 @@ fun LessonEditorV6(
         text = { Text("O plano será preservado e poderá ser restaurado em Planejamento > Arquivados.") },
         confirmButton = { TextButton(onClick = { confirmArchive = false; archive() }) { Text("Arquivar") } },
         dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancelar") } },
+    )
+    if (confirmDuplicate && duplicate != null) AlertDialog(
+        onDismissRequest = { confirmDuplicate = false },
+        title = { Text("Duplicar plano e atividades?") },
+        text = { Text("Uma cópia independente do plano e de suas atividades vinculadas será criada na mesma turma. Alterações ainda não salvas nesta tela não serão copiadas.") },
+        confirmButton = { TextButton(onClick = { confirmDuplicate = false; duplicate() }) { Text("Duplicar") } },
+        dismissButton = { TextButton(onClick = { confirmDuplicate = false }) { Text("Cancelar") } },
     )
 }
