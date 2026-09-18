@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.sayvabr.assistentepedagogico.data.Appointment
 import com.sayvabr.assistentepedagogico.data.Classroom
 import com.sayvabr.assistentepedagogico.data.Lesson
+import com.sayvabr.assistentepedagogico.data.LessonStatus
 import com.sayvabr.assistentepedagogico.data.TeacherSnapshot
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -205,9 +206,15 @@ fun PlanningWorkspace(
             Text("${lesson.time}  ·  ${lesson.subject}  ·  ${lesson.date}", color = ApColors.Pressed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(Modifier.height(4.dp))
             Text(lesson.title, color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 17.sp)
+            Text("Estado: ${lesson.status.label}", color = ApColors.Pressed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             if (lesson.content.isNotBlank()) Text(lesson.content, color = ApColors.Navy, fontSize = 13.sp)
             Spacer(Modifier.height(10.dp))
-            ApRaisedButton(if (lesson.archived) "Restaurar plano" else "Abrir e editar plano",
+            val buttonLabel = when {
+                lesson.archived -> "Restaurar plano"
+                lesson.status == LessonStatus.DRAFT -> "Abrir e editar plano"
+                else -> "Consultar e gerenciar estado"
+            }
+            ApRaisedButton(buttonLabel,
                 onClick = { if (lesson.archived) restoreLesson(lesson) else openLesson(lesson.id) }, secondary = true)
         }
     }
@@ -270,7 +277,7 @@ fun PlanningAgendaScreen(
         }
         activeLessons.filter { inPeriod(it.date) }.forEach { lesson ->
             val classroomName = data.classrooms.firstOrNull { it.id == lesson.classroomId }?.name ?: "Turma indisponível"
-            add(AgendaEntry(lesson.date, lesson.time, lesson.title, "Aula · $classroomName · ${lesson.subject}", lessonId = lesson.id))
+            add(AgendaEntry(lesson.date, lesson.time, lesson.title, "Aula · $classroomName · ${lesson.subject} · ${lesson.status.label}", lessonId = lesson.id))
         }
     }.sortedWith(compareBy<AgendaEntry> { it.day }.thenBy { it.time }.thenBy { it.title })
     val periodTitle = when (mode) {
@@ -289,7 +296,7 @@ fun PlanningAgendaScreen(
             Text("${entry.day} · ${entry.time} · ${entry.detail}", fontSize = 12.sp, color = ApColors.Pressed, fontWeight = FontWeight.Bold)
             Text(entry.title, fontSize = 17.sp, fontWeight = FontWeight.Black, color = ApColors.Navy)
             Spacer(Modifier.height(8.dp))
-            ApRaisedButton("Abrir e editar", onClick = {
+            ApRaisedButton(if (entry.lessonId != null) "Consultar plano e gerenciar estado" else "Editar compromisso", onClick = {
                 entry.lessonId?.let(openLesson) ?: entry.appointmentId?.let(openAppointment)
             }, secondary = true)
         }
