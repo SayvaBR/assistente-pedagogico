@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -22,13 +23,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Android 15/16 draw edge-to-edge by default. Consume the status-bar inset once
-        // at the activity root, instead of letting each screen paint beneath the clock.
-        // The bottom navigation already handles navigationBarsPadding in TeacherApp.
-        // imePadding keeps forms and their save actions above the software keyboard.
+        // Apply system insets at one root shared by ALL routes, including full-screen editors
+        // that hide the bottom navigation. Insets padding is consumed by Compose children:
+        // BottomBar's own navigationBarsPadding will not double-apply the navigation inset.
+        // IME padding is independent and keeps the scrollable form above the soft keyboard.
         setContent {
             ApTheme {
-                Box(Modifier.fillMaxSize().background(ApColors.Sky).statusBarsPadding().imePadding()) {
+                Box(
+                    Modifier.fillMaxSize().background(ApColors.Sky)
+                        .statusBarsPadding().navigationBarsPadding().imePadding()
+                ) {
                     CompositionLocalProvider(LocalTeacherStore provides store) {
                         TeacherApp(store)
                     }
