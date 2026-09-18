@@ -75,13 +75,13 @@ def audit(root: Path) -> list[str]:
             if re.search(r"(?m)^\s+contents:\s*write\b", source):
                 problems.append(f"{workflow.name}: auto-write access prohibited for quality agents")
         ci = read(".github/workflows/ci.yml")
-        # The owner reversed the previous postponement specifically for a disposable
-        # PR #13 DEBUG build. Reject all unscoped distribution, production binaries,
-        # missing test gate, or long-lived previews. This is not a release approval.
+        # The owner explicitly authorized a disposable PR #15 DEBUG build for real-device
+        # testing on 18/09/2026. Reject all unscoped distribution, production binaries,
+        # missing test/provenance gates, or long-lived previews. Not a release approval.
         distributes = "app/build/outputs/apk/debug/app-debug.apk" in ci or "Upload owner-requested debug preview" in ci
         if distributes:
             required = (
-                "github.event_name == 'pull_request' && github.event.pull_request.number == 13",
+                "github.event_name == 'pull_request' && github.event.pull_request.number == 15",
                 "name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}",
                 "uses: actions/upload-artifact@v4",
                 "retention-days: 3",
