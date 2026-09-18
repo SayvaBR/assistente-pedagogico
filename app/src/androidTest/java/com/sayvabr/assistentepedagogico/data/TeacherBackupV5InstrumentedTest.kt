@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,5 +48,27 @@ class TeacherBackupV5InstrumentedTest {
         val validated = TeacherBackupCodec.validate(old.toString())
         assertEquals(TeacherBackupCodec.VERSION, validated.getInt("version"))
         assertFalse(validated.getJSONArray("appointments").getJSONObject(0).has("endTime"))
+    }
+
+    @Test fun folderlessLegacyBackupCanPreviewAndRetainUnfiledDocuments() {
+        val legacy = JSONObject(TeacherBackupCodec.encode(snapshot().copy(
+            files = listOf(SavedFile(12L, "Documento fictício", "content://synthetic/legacy")),
+        )))
+        legacy.remove("folders")
+        val validated = TeacherBackupCodec.validate(legacy.toString())
+        assertEquals(0, validated.getJSONArray("folders").length())
+        assertEquals(12L, validated.getJSONArray("files").getJSONObject(0).getLong("id"))
+        assertEquals(1, TeacherBackupRestore.preview(legacy.toString()).files)
+    }
+
+    @Test fun missingFolderCatalogWithLinkedDocumentsIsRejectedBeforeRestore() {
+        val corrupted = JSONObject(TeacherBackupCodec.encode(snapshot().copy(
+            files = listOf(SavedFile(12L, "Documento fictício", "content://synthetic/legacy", folderId = 88L)),
+        )))
+        corrupted.remove("folders")
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            TeacherBackupRestore.preview(corrupted.toString())
+        }
+        assertTrue(failure.message.orEmpty().contains("pastas"))
     }
 }
