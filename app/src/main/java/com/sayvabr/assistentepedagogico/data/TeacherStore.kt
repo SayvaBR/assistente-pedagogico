@@ -216,13 +216,18 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             "duration_minutes" to value.durationMinutes, "objective" to value.objective, "specific_objectives" to value.specificObjectives,
             "content" to value.content, "bncc_codes" to value.bnccCodes, "justification" to value.justification, "method" to value.method,
             "opening" to value.opening, "opening_minutes" to value.openingMinutes, "development" to value.development,
-            "development_minutes" to value.developmentMinutes, "closing" to value.closing, "closing_minutes" to value.closingMinutes,
+            "development_minutes" to value.developmentMinutes, "closing" to value.closingMinutes, "closing_minutes" to value.closingMinutes,
             "assessment" to value.assessment, "adaptations" to value.adaptations))
         require(id > 0) { "Não foi possível salvar o plano de aula." }
         return id
     }
 
+    /** Existing Activity-owned commit callback handles regular edits AND typed transitions, re-reading the snapshot after success. */
     fun updateLesson(classroomId: Long, lessonId: Long, input: LessonPlanV6.Input) {
+        input.statusTransition?.let { target ->
+            LessonStatusV8.transition(writableDatabase, classroomId, lessonId, target)
+            return
+        }
         val value = LessonPlanV6.validated(input)
         val changed = writableDatabase.update("lessons", values(
             "title" to value.title, "subject" to value.subject, "day" to value.day, "time" to value.time,
