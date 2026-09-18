@@ -109,7 +109,7 @@ fun LessonEditorV6(
             val verified = catalogue ?: BnccCatalog.load(context)
             val unknown = verified.unknownCodes(valid.bnccCodes)
             require(unknown.isEmpty()) {
-                "Códigos BNCC não encontrados: ${unknown.joinToString(", ")}. Selecione habilidades verificadas."
+                "Códigos BNCC não encontrados: ${unknown.joinToString(", ")}. Selecione habilidades disponíveis no catálogo."
             }
         }
         return valid
@@ -230,7 +230,7 @@ fun LessonEditorV6(
                             if (editable) ApRaisedButton("Buscar e selecionar habilidades BNCC", onClick = {
                                 showBnccPicker = true
                             }, glyph = ApGlyphKind.CHECK, secondary = true)
-                            Text("Catálogo offline de terceiros em auditoria contra os documentos oficiais da BNCC.", color = ApColors.Navy)
+                            Text("Habilidades de referência disponíveis offline. Use-as como apoio ao planejamento; consulte os documentos oficiais quando precisar de conferência normativa.", color = ApColors.Navy)
                         }
                         PlanBlockKind.CONTEXT -> TextField("Justificativa / contextualização (opcional)", justification, true) { justification = it }
                         PlanBlockKind.METHODOLOGY -> TextField("Metodologia / estratégia", method, true) { method = it }
