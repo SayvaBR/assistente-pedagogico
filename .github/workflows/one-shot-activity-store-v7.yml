@@ -1,0 +1,32 @@
+name: One-shot activity v7 store integration
+on:
+  push:
+    branches:
+      - feat/14-navigation-visual-integration
+    paths:
+      - .github/workflows/one-shot-activity-store-v7.yml
+permissions:
+  contents: write
+jobs:
+  apply-once:
+    if: github.repository == 'SayvaBR/assistente-pedagogico' && github.ref == 'refs/heads/feat/14-navigation-visual-integration'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Guard branch state, apply exact patch and remove one-shot code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo 'Branch advanced; stop instead of overwriting'; exit 1; }
+          python3 tools/_once_integrate_activity_store_v7.py
+          rm tools/_once_integrate_activity_store_v7.py .github/workflows/one-shot-activity-store-v7.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git diff --cached --check
+          git commit -m 'feat(planning): migrate SQLite to v7 and expose activity CRUD through TeacherStore'
+          git push origin HEAD:feat/14-navigation-visual-integration
