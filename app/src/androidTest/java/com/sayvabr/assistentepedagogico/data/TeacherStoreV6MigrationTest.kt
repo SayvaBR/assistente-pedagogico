@@ -5,9 +5,7 @@ import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -35,7 +33,7 @@ class TeacherStoreV6MigrationTest {
                 "CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, name TEXT NOT NULL)",
                 "CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, title TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL, objective TEXT NOT NULL, content TEXT NOT NULL, method TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
                 "CREATE TABLE attendance (classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, day TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('P','F')), PRIMARY KEY(student_id,day))",
-                "CREATE TABLE observations (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL, body TEXT NOT NULL, day TEXT NOT NULL, share_approved INTEGER NOT NULL DEFAULT 0)",
+                "CREATE TABLE observations (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE SET NULL, student_id INTEGER REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL, body TEXT NOT NULL, day TEXT NOT NULL, share_approved INTEGER NOT NULL DEFAULT 0)",
                 "CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL)",
                 "CREATE TABLE saved_files (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uri TEXT NOT NULL UNIQUE)",
             ).forEach(db::execSQL)
@@ -62,7 +60,7 @@ class TeacherStoreV6MigrationTest {
     @Test fun v5ToV8KeepsAllRecordsAndAddsSafeLessonDefaultsAcrossReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(LessonStatusV8.VERSION, first.readableDatabase.version)
+        assertEquals(PlanLayoutV9.VERSION, first.readableDatabase.version)
         val snapshot = first.read()
         assertEquals("Docente Fictícia", snapshot.profile?.name)
         assertEquals(31L, snapshot.classrooms.single().id)
@@ -98,14 +96,13 @@ class TeacherStoreV6MigrationTest {
         assertEquals(43L, snapshot.files.single().id)
         assertTrue(snapshot.files.single().favorite)
         assertFalse(snapshot.folders.any())
-
         LessonPlanV6.migrate(first.writableDatabase)
         LessonStatusV8.migrate(first.writableDatabase)
         assertEquals(snapshot, first.read())
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(LessonStatusV8.VERSION, reopened.readableDatabase.version)
+        assertEquals(PlanLayoutV9.VERSION, reopened.readableDatabase.version)
         assertEquals(snapshot, reopened.read())
     }
 }
