@@ -39,8 +39,7 @@ internal object TeacherBackupIntegrity {
             }
         }
 
-        // Validate the same timing invariants as the editor BEFORE restoring the backup. An
-        // otherwise valid SQLite row may be impossible to edit or share once reloaded.
+        // Validate the same moment invariants as the editor BEFORE restoring a backup.
         val lessons = root.getJSONArray("lessons")
         for (index in 0 until lessons.length()) {
             val lesson = lessons.getJSONObject(index)
@@ -54,8 +53,6 @@ internal object TeacherBackupIntegrity {
             require(opening + development + closing <= duration.toLong()) {
                 "A soma dos momentos ultrapassa a duração do plano no backup."
             }
-            // The v1 envelope predates rich plans: missing descriptions and durations together
-            // remain valid, but a half-filled moment is not a meaningful pedagogical plan.
             listOf(
                 "abertura" to ("opening" to opening),
                 "desenvolvimento" to ("development" to development),
@@ -66,9 +63,14 @@ internal object TeacherBackupIntegrity {
                     "O momento de $label deve ter descrição e tempo juntos no backup."
                 }
             }
-            // Old backups lack durationMinutes entirely and must retain their legacy schedule.
-            // New exports contain it, so enforce the editor's no-midnight-wrap policy for them.
-            if (lesson.has("durationMinutes") && !lesson.isNull("durationMinutes")) {
+
+            // v5 plans never had a duration. On migrating to v6 the database assigns 50 minutes,
+            // and the exporter includes that default even if a late-day legacy plan was valid.
+            // Keep those exact, otherwise-unenriched records restorable instead of losing them.
+            val isLegacyDefault = duration == 50 && opening == 0L && development == 0L && closing == 0L &&
+                listOf("specificObjectives", "bnccCodes", "justification", "opening", "development",
+                    "closing", "assessment", "adaptations").all { lesson.optString(it, "").isBlank() }
+            if (lesson.has("durationMinutes") && !lesson.isNull("durationMinutes") && !isLegacyDefault) {
                 LessonPlanV6.endTime(lesson.getString("time"), duration)
             }
         }
