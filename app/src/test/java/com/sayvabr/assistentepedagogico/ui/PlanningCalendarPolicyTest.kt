@@ -41,4 +41,20 @@ class PlanningCalendarPolicyTest {
         assertTrue(PlanningCalendarPolicy.matchesMonth("2027-01-31", focus))
         assertFalse(PlanningCalendarPolicy.matchesMonth("2026-12-31", focus))
     }
+
+    @Test fun monthListingIncludesEntireSelectedMonthButNeverAdjacentCalendarCells() {
+        val focus = LocalDate.parse("2026-08-17")
+        // Grid has Jul 27 and Sep 06, but list may contain only dates belonging to August.
+        assertTrue(PlanningCalendarPolicy.monthCells(focus).contains(LocalDate.parse("2026-07-27")))
+        assertTrue(PlanningCalendarPolicy.monthCells(focus).contains(LocalDate.parse("2026-09-06")))
+        assertTrue(PlanningCalendarPolicy.inPeriod("2026-08-01", focus, "Mês"))
+        assertTrue(PlanningCalendarPolicy.inPeriod("2026-08-31", focus, "Mês"))
+        assertFalse(PlanningCalendarPolicy.inPeriod("2026-07-31", focus, "Mês"))
+        assertFalse(PlanningCalendarPolicy.inPeriod("2026-09-01", focus, "Mês"))
+        assertFalse(PlanningCalendarPolicy.inPeriod("2026-08-18", focus, "Dia"))
+        assertTrue(PlanningCalendarPolicy.inPeriod("2026-08-17", focus, "Dia"))
+        assertTrue(PlanningCalendarPolicy.inPeriod("2026-08-23", focus, "Semana"))
+        assertFalse(PlanningCalendarPolicy.inPeriod("2026-08-24", focus, "Semana"))
+        assertFalse(PlanningCalendarPolicy.inPeriod("2026-08-17", focus, "Arquivados"))
+    }
 }
