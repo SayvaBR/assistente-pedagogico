@@ -20,7 +20,7 @@ object PlanningScheduleConflicts {
                WHERE l.day=? AND l.archived=0 AND c.archived=0
                  AND l.pedagogical_status IN ('ready','completed') AND l.time < ?
                  AND (CAST(substr(l.time,1,2) AS INTEGER)*60 +
-                      CAST(substr(l.time,4,2) AS INTEGER) + l.duration_minutes) > ?
+                      CAST(substr(l.time,4,2) AS INTEGER) + l.duration_minutes) > CAST(? AS INTEGER)
                  AND $classroomFilter LIMIT 1""".trimIndent(),
             args.toTypedArray(),
         ).use { return it.moveToFirst() }
