@@ -28,5 +28,12 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # Debug assembly remains an internal quality gate. Do not upload APK artifacts
-      # routinely; a preview must be explicitly re-enabled for a specific owner request.
+      # Explicitly authorized preview for PR #15 only; remove this step after delivery.
+      - name: Publish owner-requested Android debug preview
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistente-pedagogico-apk-preview-pr15
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
