@@ -37,7 +37,7 @@ data class TeacherSnapshot(
     val folders: List<FileFolder> = emptyList(),
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, LessonStatusV8.VERSION) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, PlanLayoutV9.VERSION) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -56,11 +56,12 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         LessonPlanV6.migrate(db)
         LessonActivityV7.migrate(db)
         LessonStatusV8.migrate(db)
+        PlanLayoutV9.migrate(db)
     }
 
     /** SQLiteOpenHelper wraps onUpgrade in a transaction, rolling back every ALTER on failure. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..7 && newVersion == LessonStatusV8.VERSION) {
+        require(oldVersion in 1..8 && newVersion == PlanLayoutV9.VERSION) {
             "Unsupported database migration from $oldVersion to $newVersion"
         }
         if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
@@ -70,6 +71,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         if (oldVersion < 6) LessonPlanV6.migrate(db)
         if (oldVersion < 7) LessonActivityV7.migrate(db)
         if (oldVersion < 8) LessonStatusV8.migrate(db)
+        if (oldVersion < 9) PlanLayoutV9.migrate(db)
     }
 
     fun read(): TeacherSnapshot {
@@ -85,7 +87,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8), c.getInt(9) == 1,
             c.getInt(10), c.getString(11), c.getString(12), c.getString(13), c.getString(14), c.getInt(15), c.getString(16), c.getInt(17), c.getString(18), c.getInt(19), c.getString(20), c.getString(21), LessonStatus.parse(c.getString(22))) }
         val attendance = mutableListOf<Attendance>()
-        db.rawQuery("SELECT classroom_id,student_id,day,status FROM attendance", null).use { c -> while (c.moveToNext()) attendance += Attendance(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3)) }
+        db.rawQuery("SELECT classroom_id,student_id,day,status FROM attendance", null).use { c -> while (c.moveToNext()) attendance += Attendance(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getInt(5), c.getInt(6) == 1) }
         val observations = mutableListOf<Observation>()
         db.rawQuery("SELECT id,classroom_id,student_id,kind,body,day,share_approved FROM observations ORDER BY id DESC", null).use { c -> while (c.moveToNext()) observations += Observation(c.getLong(0), c.getLong(1), if (c.isNull(2)) null else c.getLong(2), c.getString(3), c.getString(4), c.getString(5), c.getInt(6) == 1) }
         val appointments = mutableListOf<Appointment>()
