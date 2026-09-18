@@ -240,7 +240,9 @@ fun PlanningAgendaScreen(
     }
     val entries = buildList {
         data.appointments.filter { inPeriod(it.date) }.forEach { appointment: Appointment ->
-            add(AgendaEntry(appointment.date, appointment.time, appointment.title, "Compromisso", appointmentId = appointment.id))
+            val room = appointment.classroomId?.let { id -> data.classrooms.firstOrNull { it.id == id }?.name ?: "Turma indisponível" } ?: "Geral"
+            val detail = "${appointment.type} · ${appointment.time}–${appointment.endTime} · $room"
+            add(AgendaEntry(appointment.date, appointment.time, appointment.title, detail, appointmentId = appointment.id))
         }
         activeLessons.filter { inPeriod(it.date) }.forEach { lesson ->
             val classroomName = data.classrooms.firstOrNull { it.id == lesson.classroomId }?.name ?: "Turma indisponível"

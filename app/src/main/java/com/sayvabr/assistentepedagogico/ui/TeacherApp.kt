@@ -278,13 +278,17 @@ fun TeacherApp(store: TeacherStore) {
                     "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { requestNavigate("newAppointment") }, { appointmentId ->
                         selectedAppointment = appointmentId; requestNavigate("editAppointment")
                     }, { lessonId -> selectedLesson = lessonId; requestNavigate("editLesson") })
-                    "newAppointment" -> AppointmentForm(selectedDay, { requestBack() }, { title, day, time ->
-                        commit("agenda", onSuccess = { selectedDay = day }) { store.addAppointment(title, day, time) }
-                    }, onDirty = { formDirty = true })
+                    "newAppointment" -> AppointmentEditorV5(initialDay = selectedDay, classes = snapshot.classrooms,
+                        back = { requestBack() }, save = { input ->
+                            commit("agenda", onSuccess = { selectedDay = input.day }) { store.addAppointment(input) }
+                        }, onDirty = { formDirty = true })
                     "editAppointment" -> snapshot.appointments.firstOrNull { it.id == selectedAppointment }?.let { appointment ->
-                        AppointmentForm(appointment.date, { requestBack() }, { title, day, time ->
-                            commit("agenda", onSuccess = { selectedDay = day }) { store.updateAppointment(appointment.id, title, day, time) }
-                        }, initial = appointment, delete = { commit("agenda") { store.deleteAppointment(appointment.id) } },
+                        AppointmentEditorV5(initialDay = appointment.date, classes = snapshot.classrooms,
+                            initial = appointment, back = { requestBack() }, save = { input ->
+                                commit("agenda", onSuccess = { selectedDay = input.day }) {
+                                    store.updateAppointment(appointment.id, input)
+                                }
+                            }, delete = { commit("agenda") { store.deleteAppointment(appointment.id) } },
                             onDirty = { formDirty = true })
                     }
                     "files" -> FileCatalogScreen(
@@ -799,27 +803,6 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit,
     add: () -> Unit, open: (Long) -> Unit, openLesson: (Long) -> Unit) {
     PlanningAgendaScreen(data, day, onDay, add, open, openLesson)
-}
-
-@Composable private fun AppointmentForm(initialDay: String, back: () -> Unit, save: (String, String, String) -> Unit,
-    initial: Appointment? = null, delete: (() -> Unit)? = null, onDirty: () -> Unit = {}) {
-    var title by rememberSaveable(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
-    var day by rememberSaveable(initial?.id) { mutableStateOf(initial?.date ?: initialDay) }
-    var time by rememberSaveable(initial?.id) { mutableStateOf(initial?.time ?: "08:00") }
-    var confirmDeletion by remember { mutableStateOf(false) }
-    Heading(if (initial == null) "Novo compromisso" else "Editar compromisso", "Organize sua agenda", back)
-    Panel {
-        Input("Título do compromisso", title, { if (it != title) { title = it; onDirty() } })
-        Input("Data (AAAA-MM-DD)", day, { if (it != day) { day = it; onDirty() } })
-        Input("Horário (HH:MM)", time, { if (it != time) { time = it; onDirty() } })
-        PrimaryButton(if (initial == null) "Salvar compromisso" else "Salvar alterações") { save(title, day, time) }
-        if (delete != null) { Spacer(Modifier.height(12.dp)); PrimaryButton("Excluir compromisso", secondary = true) { confirmDeletion = true } }
-    }
-    if (confirmDeletion && delete != null) AlertDialog(
-        onDismissRequest = { confirmDeletion = false }, title = { Text("Excluir compromisso?") },
-        text = { Text("Esta exclusão é permanente e afeta somente este compromisso.") },
-        confirmButton = { TextButton(onClick = { confirmDeletion = false; delete() }) { Text("Excluir definitivamente") } },
-        dismissButton = { TextButton(onClick = { confirmDeletion = false }) { Text("Cancelar") } })
 }
 
 @Composable private fun MoreScreen(data: TeacherSnapshot, go: (String) -> Unit) {

@@ -14,7 +14,8 @@ data class Student(val id: Long, val classroomId: Long, val name: String)
 data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String, val archived: Boolean = false)
 data class Attendance(val classroomId: Long, val studentId: Long, val date: String, val status: String)
 data class Observation(val id: Long, val classroomId: Long, val studentId: Long?, val kind: String, val body: String, val date: String, val shareApproved: Boolean)
-data class Appointment(val id: Long, val title: String, val date: String, val time: String)
+data class Appointment(val id: Long, val title: String, val date: String, val time: String,
+    val endTime: String = time, val type: String = "Outro", val classroomId: Long? = null)
 data class SavedFile(
     val id: Long, val name: String, val uri: String,
     val folderId: Long? = null, val favorite: Boolean = false,
@@ -32,7 +33,7 @@ data class TeacherSnapshot(
     val folders: List<FileFolder> = emptyList(),
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, FileLibraryV4.VERSION) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, AppointmentV5.VERSION) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -47,16 +48,18 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             "CREATE TABLE saved_files (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uri TEXT NOT NULL UNIQUE)",
         ).forEach(db::execSQL)
         FileLibraryV4.migrate(db)
+        AppointmentV5.migrate(db)
     }
 
     /** SQLiteOpenHelper wraps onUpgrade in a transaction, rolling back every ALTER on failure. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..3 && newVersion == FileLibraryV4.VERSION) {
+        require(oldVersion in 1..4 && newVersion == AppointmentV5.VERSION) {
             "Unsupported database migration from $oldVersion to $newVersion"
         }
         if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         if (oldVersion < 3) db.execSQL("ALTER TABLE lessons ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         if (oldVersion < 4) FileLibraryV4.migrate(db)
+        if (oldVersion < 5) AppointmentV5.migrate(db)
     }
 
     fun read(): TeacherSnapshot {
@@ -74,7 +77,10 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         val observations = mutableListOf<Observation>()
         db.rawQuery("SELECT id,classroom_id,student_id,kind,body,day,share_approved FROM observations ORDER BY id DESC", null).use { c -> while (c.moveToNext()) observations += Observation(c.getLong(0), c.getLong(1), if (c.isNull(2)) null else c.getLong(2), c.getString(3), c.getString(4), c.getString(5), c.getInt(6) == 1) }
         val appointments = mutableListOf<Appointment>()
-        db.rawQuery("SELECT id,title,day,time FROM appointments ORDER BY day,time", null).use { c -> while (c.moveToNext()) appointments += Appointment(c.getLong(0), c.getString(1), c.getString(2), c.getString(3)) }
+        db.rawQuery("SELECT id,title,day,time,end_time,type,classroom_id FROM appointments ORDER BY day,time", null).use { c ->
+            while (c.moveToNext()) appointments += Appointment(c.getLong(0), c.getString(1), c.getString(2), c.getString(3),
+                if (c.isNull(4)) c.getString(3) else c.getString(4), c.getString(5), if (c.isNull(6)) null else c.getLong(6))
+        }
         val files = FileLibraryV4.files(db).filter { it.trashedAt == null }.map {
             SavedFile(it.id, it.name, it.uri, it.folderId, it.favorite, it.trashedAt, it.accessState)
         }
@@ -235,6 +241,11 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         require(removed == 1) { "Observação não encontrada nesta turma." }
     }
 
+    /** v5 writes are validated, scoped, and transactional; callers use Activity-owned helper. */
+    fun addAppointment(input: AppointmentV5.Input): Long = AppointmentV5.create(writableDatabase, input)
+    fun updateAppointment(appointmentId: Long, input: AppointmentV5.Input) = AppointmentV5.update(writableDatabase, appointmentId, input)
+
+    /** Legacy API retained for binary/source compatibility with earlier tests. */
     fun addAppointment(title: String, day: String, time: String) {
         require(title.isNotBlank()) { "Informe o compromisso." }
         LocalDate.parse(day)
