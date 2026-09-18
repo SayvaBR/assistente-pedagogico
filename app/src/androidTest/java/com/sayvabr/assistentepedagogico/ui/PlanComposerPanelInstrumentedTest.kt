@@ -68,6 +68,36 @@ class PlanComposerPanelInstrumentedTest {
         }
     }
 
+    @Test fun sectionRenameRequiresValidConfirmationAndCancelPreservesTitle() {
+        val current = mutableStateOf(PlanComposition.standard())
+        compose.setContent {
+            ApTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    PlanComposerPanel(
+                        layout = current.value,
+                        enabled = true,
+                        templates = emptyList(),
+                        onChange = { current.value = it },
+                        onSaveTemplate = {},
+                        onRemoveTemplate = {},
+                        sectionContent = {},
+                    )
+                }
+            }
+        }
+        compose.onAllNodesWithText("Renomear seção").onFirst().performScrollTo().performClick()
+        compose.onAllNodes(hasSetTextAction()).onLast().performTextReplacement("X")
+        compose.onNodeWithText("Salvar nome").assertIsNotEnabled()
+        compose.runOnIdle { assertEquals("Identificação", current.value.blocks.first().title) }
+        compose.onAllNodes(hasSetTextAction()).onLast().performTextReplacement("Identificação personalizada")
+        compose.onNodeWithText("Salvar nome").performClick()
+        compose.runOnIdle { assertEquals("Identificação personalizada", current.value.blocks.first().title) }
+        compose.onAllNodesWithText("Renomear seção").onFirst().performScrollTo().performClick()
+        compose.onAllNodes(hasSetTextAction()).onLast().performTextReplacement("Não aplicar esta mudança")
+        compose.onNodeWithText("Cancelar").performClick()
+        compose.runOnIdle { assertEquals("Identificação personalizada", current.value.blocks.first().title) }
+    }
+
     @Test fun unsavedCustomSectionSurvivesAndroidStateRestoration() {
         var observed: PlanComposition? = null
         val restoration = StateRestorationTester(compose)
