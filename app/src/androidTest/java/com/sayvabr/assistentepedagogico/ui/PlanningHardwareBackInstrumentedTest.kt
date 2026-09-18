@@ -2,11 +2,11 @@ package com.sayvabr.assistentepedagogico.ui
 
 import android.content.Context
 import android.os.Build
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sayvabr.assistentepedagogico.data.TeacherStore
 import org.junit.After
@@ -17,10 +17,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Sends Android's real Back event; never uses screenshot or actual pupil records. */
+/** Tests Activity's Android Back dispatcher without depending on Espresso window focus. */
 @RunWith(AndroidJUnit4::class)
 class PlanningHardwareBackInstrumentedTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var context: Context
     private var store: TeacherStore? = null
     private var emulator = false
@@ -48,23 +48,27 @@ class PlanningHardwareBackInstrumentedTest {
         if (emulator) context.deleteDatabase("pedagogico.db")
     }
 
-    @Test fun physicalBackFromDirtyLessonRequiresDiscardAndKeepsRecordUnsaved() {
+    private fun dispatchBack() {
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
+
+    @Test fun activityBackFromDirtyLessonRequiresDiscardAndKeepsRecordUnsaved() {
         compose.onAllNodesWithText("Planejamento").onLast().performClick()
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
         compose.onAllNodes(hasSetTextAction())[0].performTextInput("Rascunho físico sintético")
-        Espresso.closeSoftKeyboard()
-        Espresso.pressBack()
+        dispatchBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Rascunho físico sintético").assertExists()
-        Espresso.pressBack()
+        dispatchBack()
         compose.onNodeWithText("Descartar").performClick()
         compose.onNodeWithText("Adicionar aula").assertExists()
         assertTrue(requireNotNull(store).read().lessons.isEmpty())
     }
 
-    @Test fun physicalBackAtHomeAsksBeforeExiting() {
-        Espresso.pressBack()
+    @Test fun activityBackAtHomeAsksBeforeExiting() {
+        dispatchBack()
         compose.onNodeWithText("Sair do Assistente Pedagógico?").assertExists()
         compose.onNodeWithText("Continuar no app").performClick()
         compose.onNodeWithText("Que bom ter você aqui hoje", substring = true).assertExists()
