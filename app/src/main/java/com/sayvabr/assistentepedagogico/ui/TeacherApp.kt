@@ -277,7 +277,7 @@ fun TeacherApp(store: TeacherStore) {
                     } ?: Panel { Text("Plano indisponível. Retorne ao Planejamento.", color = ink); PrimaryButton("Voltar ao planejamento") { navigate("planning", root = true) } }
                     "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { requestNavigate("newAppointment") }, { appointmentId ->
                         selectedAppointment = appointmentId; requestNavigate("editAppointment")
-                    })
+                    }, { lessonId -> selectedLesson = lessonId; requestNavigate("editLesson") })
                     "newAppointment" -> AppointmentForm(selectedDay, { requestBack() }, { title, day, time ->
                         commit("agenda", onSuccess = { selectedDay = day }) { store.addAppointment(title, day, time) }
                     }, onDirty = { formDirty = true })
@@ -762,43 +762,7 @@ fun TeacherApp(store: TeacherStore) {
 
 @Composable private fun PlanningScreen(data: TeacherSnapshot, classroom: Classroom?, day: String, onDay: (String) -> Unit,
     go: (String) -> Unit, openLesson: (Long) -> Unit, restoreLesson: (Lesson) -> Unit) {
-    Heading("Planejamento", "Suas aulas por dia, semana e mês")
-    var view by rememberSaveable { mutableStateOf("Dia") }
-    ApSegmentedControl(listOf("Dia", "Semana", "Mês", "Arquivados"), view) { view = it }
-    Spacer(Modifier.height(12.dp))
-    val focus = LocalDate.parse(day)
-    val start = when (view) { "Semana" -> focus.minusDays((focus.dayOfWeek.value - 1).toLong()); "Mês" -> focus.withDayOfMonth(1); else -> focus }
-    val end = when (view) { "Semana" -> start.plusDays(6); "Mês" -> start.plusMonths(1).minusDays(1); else -> focus }
-    if (view == "Dia") DaySwitch(day, onDay)
-    else if (view != "Arquivados") {
-        Panel {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("‹", Modifier.clickable { onDay(if (view == "Semana") focus.minusWeeks(1).toString() else focus.minusMonths(1).toString()) }.padding(6.dp), color = blue, fontSize = 29.sp)
-                Text(if (view == "Semana") "${start.format(DateTimeFormatter.ofPattern("dd/MM"))} – ${end.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))}"
-                    else start.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale("pt", "BR"))).replaceFirstChar { it.uppercase() }, color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-                Text("›", Modifier.clickable { onDay(if (view == "Semana") focus.plusWeeks(1).toString() else focus.plusMonths(1).toString()) }.padding(6.dp), color = blue, fontSize = 29.sp)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-    }
-    val lessons = data.lessons.filter { lesson ->
-        lesson.classroomId == classroom?.id && if (view == "Arquivados") lesson.archived else !lesson.archived && lesson.date >= start.toString() && lesson.date <= end.toString()
-    }.sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
-    Subtitle(if (view == "Arquivados") "Planos arquivados (${lessons.size})" else "${lessons.size} aula(s) neste período")
-    if (classroom == null) Panel { Text("Crie ou restaure uma turma para consultar seus planos.", color = ink) }
-    else if (lessons.isEmpty()) Panel { Text(if (view == "Arquivados") "Nenhum plano arquivado nesta turma." else "Nenhum plano neste período. Use o botão abaixo para planejar sua próxima aula.", color = ink) }
-    lessons.forEach { lesson ->
-        Panel {
-            Text("${lesson.date} • ${lesson.time} • ${lesson.subject}", fontSize = 13.sp, color = blue, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp)); Text(lesson.title, fontSize = 19.sp, color = ink, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(9.dp)); Text("Objetivo: ${lesson.objective}", fontSize = 14.sp, color = ink)
-            if (lesson.content.isNotEmpty()) Text("Conteúdo: ${lesson.content}", fontSize = 13.sp, color = ink)
-            if (lesson.method.isNotEmpty()) Text("Metodologia: ${lesson.method}", fontSize = 13.sp, color = ink)
-            Spacer(Modifier.height(12.dp)); if (lesson.archived) PrimaryButton("Restaurar plano") { restoreLesson(lesson) } else PrimaryButton("Abrir e editar plano") { openLesson(lesson.id) }
-        }
-        Spacer(Modifier.height(9.dp))
-    }
-    Spacer(Modifier.height(12.dp)); if (classroom != null && view != "Arquivados") PrimaryButton("+ Adicionar aula") { go("newLesson") }
+    PlanningWorkspace(data, classroom, day, onDay, go, openLesson, restoreLesson)
 }
 
 @Composable private fun LessonForm(classroom: Classroom, initialDay: String, back: () -> Unit,
@@ -832,13 +796,9 @@ fun TeacherApp(store: TeacherStore) {
         dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancelar") } })
 }
 
-@Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit, add: () -> Unit, open: (Long) -> Unit) {
-    Heading("Compromissos", "Organize sua rotina e foque no que importa")
-    DaySwitch(day, onDay); Subtitle("Agenda do dia")
-    val events = data.appointments.filter { it.date == day }
-    if (events.isEmpty()) Panel { Text("Nenhum compromisso para esta data.", color = ink) }
-    events.forEach { item -> ActionTile(ApGlyphKind.CALENDAR, item.title, item.time) { open(item.id) } }
-    Spacer(Modifier.height(12.dp)); PrimaryButton("+ Novo compromisso", click = add)
+@Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit,
+    add: () -> Unit, open: (Long) -> Unit, openLesson: (Long) -> Unit) {
+    PlanningAgendaScreen(data, day, onDay, add, open, openLesson)
 }
 
 @Composable private fun AppointmentForm(initialDay: String, back: () -> Unit, save: (String, String, String) -> Unit,

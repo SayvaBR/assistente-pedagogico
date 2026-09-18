@@ -34,7 +34,7 @@ import java.util.Locale
 private val monthLabel = DateTimeFormatter.ofPattern("MMMM 'de' yyyy", Locale("pt", "BR"))
 private val completeDayLabel = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))
 private val weekNames = listOf("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
-private fun capitalized(value: String) = value.replaceFirstChar { it.uppercase(Locale("pt", "BR")) }
+private fun capitalized(value: String) = value.replaceFirstChar { it.uppercase() }
 
 @Composable
 private fun DateNavigator(focus: LocalDate, mode: String, onPick: (String) -> Unit) {
