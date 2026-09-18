@@ -1,21 +1,15 @@
 name: Android visual evidence
-# Requested visual gate for this design iteration. Only the isolated visual-integration
-# branch triggers automatically; later PRs still require explicit scope decisions.
+# User requested no routine screenshots during foundation development.
+# Run manually only at a specific visual gate; never distribute an APK.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'app/src/main/java/**/ui/**'
-      - 'tools/capture_android_screens.py'
-      - '.github/workflows/visual.yml'
 permissions:
   contents: read
 concurrency:
-  group: android-visual-${{ github.event.pull_request.head.sha || github.sha }}
+  group: android-visual-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   screenshot:
-    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'feat/14-navigation-visual-integration'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -46,11 +40,9 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            # android-emulator-runner launches this script with /bin/sh, not bash.
             set -eu
             gradle --no-daemon :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            # Only the debug applicationId has .preview; Activity stays in main namespace.
             adb shell am start -W -n com.sayvabr.assistentepedagogico.preview/com.sayvabr.assistentepedagogico.MainActivity
             python3 tools/capture_android_screens.py
       - name: Upload genuine screenshots, including partial evidence after failure
