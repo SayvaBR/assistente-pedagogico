@@ -97,7 +97,7 @@ fun BnccPicker(
                                 Text(entry.text, maxLines = 4, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
                                 val context = listOfNotNull(
                                     entry.ageGroup.takeIf(String::isNotBlank),
-                                    entry.years.takeIf(List<Int>::isNotEmpty)?.joinToString(", ") { "$itº ano" },
+                                    entry.years.takeIf(List<Int>::isNotEmpty)?.joinToString(", ") { "${it}º ano" },
                                     entry.sourcePage.takeIf(String::isNotBlank),
                                 ).joinToString(" · ")
                                 if (context.isNotBlank()) Text(context, style = MaterialTheme.typography.labelSmall)
