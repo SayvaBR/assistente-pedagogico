@@ -1,7 +1,6 @@
 package com.sayvabr.assistentepedagogico.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -23,6 +22,16 @@ import com.sayvabr.assistentepedagogico.data.AppointmentV5
 import com.sayvabr.assistentepedagogico.data.Classroom
 import java.time.LocalTime
 
+/** The suggestion is UI-only. Never replace an unknown legacy duration in SQLite without Save. */
+internal fun suggestedAppointmentEnd(startTime: String): String {
+    val start = LocalTime.parse(startTime)
+    return when {
+        start.isBefore(LocalTime.of(23, 0)) -> start.plusHours(1).toString()
+        start.isBefore(LocalTime.of(23, 59)) -> "23:59"
+        else -> startTime // No valid same-day end exists; user must change the start time.
+    }
+}
+
 /** Real offline appointment form; all writes go through the Activity-owned TeacherStore. */
 @Composable
 fun AppointmentEditorV5(
@@ -38,7 +47,8 @@ fun AppointmentEditorV5(
     var day by rememberSaveable(initial?.id) { mutableStateOf(initial?.date ?: initialDay) }
     var start by rememberSaveable(initial?.id) { mutableStateOf(initial?.time ?: "08:00") }
     var end by rememberSaveable(initial?.id) {
-        mutableStateOf(initial?.endTime?.takeIf { it != initial.time } ?: "09:00")
+        mutableStateOf(initial?.endTime?.takeIf { it != initial.time }
+            ?: suggestedAppointmentEnd(initial?.time ?: "08:00"))
     }
     var type by rememberSaveable(initial?.id) { mutableStateOf(initial?.type ?: "Outro") }
     var classroomId by rememberSaveable(initial?.id) { mutableStateOf(initial?.classroomId ?: -1L) }
@@ -99,12 +109,12 @@ fun AppointmentEditorV5(
                 }
                 DropdownMenu(expanded = classesExpanded, onDismissRequest = { classesExpanded = false }) {
                     DropdownMenuItem(text = { Text("Geral / sem turma") }, onClick = {
-                        if (classroomId != -1L) { classroomId = -1L; onDirty() }
+                        if (classroomId != -1L) { classroomId = -1L; validationError = null; onDirty() }
                         classesExpanded = false
                     })
                     availableClasses.forEach { classroom ->
                         DropdownMenuItem(text = { Text("${classroom.name} · turma ${classroom.id}") }, onClick = {
-                            if (classroomId != classroom.id) { classroomId = classroom.id; onDirty() }
+                            if (classroomId != classroom.id) { classroomId = classroom.id; validationError = null; onDirty() }
                             classesExpanded = false
                         })
                     }
@@ -112,7 +122,7 @@ fun AppointmentEditorV5(
             }
             if (initial != null && initial.endTime == initial.time) {
                 Spacer(Modifier.height(8.dp))
-                Text("Este compromisso antigo não tinha duração registrada. Confirme um horário final antes de salvar.",
+                Text("Este compromisso antigo não tinha duração registrada. Confira o horário final sugerido antes de salvar.",
                     color = ApColors.Navy)
             }
             validationError?.let { message ->
