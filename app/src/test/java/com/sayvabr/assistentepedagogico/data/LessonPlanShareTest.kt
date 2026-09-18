@@ -78,6 +78,8 @@ class LessonPlanShareTest {
         assertFalse(text.contains("Texto oficial gerado"))
         val without = layout.remove("bncc")
         assertFalse(LessonPlanShare.asPlainText(input(), "Turma fictícia", without).contains("EF05CI02"))
-        assertEquals(layout.blocks.map { it.id }, PlanLayoutV9.decode(PlanLayoutV9.encode(layout)).blocks.map { it.id })
+        val template = layout.saveAsTemplate("Escola sintética").instantiate()
+        assertEquals(layout.blocks.map { it.id }, template.blocks.map { it.id })
+        assertTrue(template.blocks.all { it.body.isEmpty() })
     }
 }
