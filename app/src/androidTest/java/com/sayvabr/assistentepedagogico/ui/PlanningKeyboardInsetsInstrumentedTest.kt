@@ -49,7 +49,8 @@ class PlanningKeyboardInsetsInstrumentedTest {
 
     @Test fun longLessonEditorCanScrollToSaveWithoutPersistingAnIncompleteDraft() {
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
-        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Aula incompleta fictícia")
+        // The first text input names a template; the second is the lesson title.
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Aula incompleta fictícia")
         compose.onNodeWithText("Salvar plano de aula").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Salvar plano de aula").performClick()
         compose.onNodeWithText("Salvar plano de aula").assertExists()
