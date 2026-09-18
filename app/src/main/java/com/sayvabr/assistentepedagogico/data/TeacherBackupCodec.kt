@@ -58,7 +58,7 @@ object TeacherBackupCodec {
         }) } })
     }.toString()
 
-    /** Validates envelope before any future restore code is allowed to touch SQLite. */
+    /** Validates the envelope and record ownership before preview or restore can touch SQLite. */
     fun validate(payload: String): JSONObject {
         require(payload.toByteArray(Charsets.UTF_8).size <= 10 * 1024 * 1024) { "Backup excede o limite de 10 MB." }
         val root = runCatching { JSONObject(payload) }.getOrElse { throw IllegalArgumentException("Backup inválido.", it) }
@@ -67,6 +67,7 @@ object TeacherBackupCodec {
         listOf("classrooms", "students", "lessons", "attendance", "observations", "appointments", "files", "folders").forEach {
             require(root.optJSONArray(it) != null) { "Backup incompleto: $it." }
         }
+        TeacherBackupIntegrity.validate(root)
         return root
     }
 }
