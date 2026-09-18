@@ -17,7 +17,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.sayvabr.assistentepedagogico.data.BnccCatalog
 
-/** Offline picker: the text and codes come only from the verified bundled catalogue. */
+/** Offline picker. This independent catalogue is attributed, not an official MEC service. */
 @Composable
 fun BnccPicker(
     catalog: BnccCatalog,
@@ -28,14 +28,22 @@ fun BnccPicker(
     var query by rememberSaveable { mutableStateOf("") }
     var stage by rememberSaveable { mutableStateOf("TODAS") }
     var year by rememberSaveable { mutableStateOf("") }
-    val selected = remember(initialCodes.joinToString("|")) {
-        mutableStateListOf<String>().also { it.addAll(initialCodes.distinct()) }
+    // A plain String can be saved by Android's registry. The previous remember-only
+    // SnapshotStateList lost the teacher's unconfirmed choices on configuration changes.
+    var selectedRaw by rememberSaveable(initialCodes.joinToString("|")) {
+        mutableStateOf(initialCodes.distinct().joinToString(","))
+    }
+    val selected = BnccCatalog.parseCodes(selectedRaw)
+    fun select(code: String) {
+        selectedRaw = (if (code in selected) selected.filterNot { it == code } else selected + code)
+            .joinToString(",")
     }
     val matches = remember(catalog, query, stage, year) {
         catalog.search(
             query = query,
             stage = stage.takeIf { it in setOf("EI", "EF", "EM") },
-            year = year.toIntOrNull(),
+            // A year chosen for Fundamental must not leak into Infantil/Computação/Médio.
+            year = year.toIntOrNull().takeIf { stage == "EF" },
             supplementOnly = stage == "CO",
             limit = 100,
         )
@@ -59,7 +67,9 @@ fun BnccPicker(
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
                     items(listOf("TODAS" to "Todas", "EI" to "Infantil", "EF" to "Fundamental", "EM" to "Médio", "CO" to "Computação")) { option ->
-                        FilterChip(selected = stage == option.first, onClick = { stage = option.first }, label = { Text(option.second) })
+                        FilterChip(selected = stage == option.first, onClick = {
+                            if (stage != option.first) { stage = option.first; year = "" }
+                        }, label = { Text(option.second) })
                     }
                 }
                 if (stage == "EF") {
@@ -74,10 +84,10 @@ fun BnccPicker(
                 Text("${selected.size} selecionada(s) · ${matches.size} resultado(s) exibidos", style = MaterialTheme.typography.labelMedium)
                 val unavailable = selected.filter { catalog.find(it) == null }
                 if (unavailable.isNotEmpty()) {
-                    Text("Códigos anteriores não encontrados: remova-os ou substitua-os por habilidades verificadas.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text("Códigos anteriores não encontrados: remova-os ou substitua-os por habilidades cadastradas.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         items(unavailable) { code ->
-                            TextButton(onClick = { selected.remove(code) }) { Text("Remover $code") }
+                            TextButton(onClick = { select(code) }) { Text("Remover $code") }
                         }
                     }
                 }
@@ -86,9 +96,8 @@ fun BnccPicker(
                     items(matches, key = { it.code }) { entry ->
                         val checked = entry.code in selected
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                if (checked) selected.remove(entry.code) else selected.add(entry.code)
-                            }.padding(vertical = 8.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { select(entry.code) }
+                                .padding(vertical = 8.dp),
                         ) {
                             Checkbox(checked = checked, onCheckedChange = null)
                             Spacer(Modifier.width(8.dp))
@@ -107,14 +116,13 @@ fun BnccPicker(
                     }
                 }
                 if (matches.size == 100) Text("Mostrando os primeiros 100 resultados. Refine a busca para encontrar outros.", style = MaterialTheme.typography.labelSmall)
-                Text("Dados: ${catalog.attribution} · CC BY 4.0 · iniciativa independente, sem vínculo com o MEC.", style = MaterialTheme.typography.labelSmall)
+                Text("Fonte independente: ${catalog.attribution} · CC BY 4.0 · sem vínculo ou homologação pelo MEC. Confira as habilidades no documento oficial antes de usar.", style = MaterialTheme.typography.labelSmall)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("Cancelar") }
                     Spacer(Modifier.width(8.dp))
-                    Button(
-                        enabled = unavailable.isEmpty(),
-                        onClick = { onConfirm(selected.sorted()) },
-                    ) { Text("Usar selecionadas") }
+                    Button(enabled = unavailable.isEmpty(), onClick = { onConfirm(selected.sorted()) }) {
+                        Text("Usar selecionadas")
+                    }
                 }
             }
         }
