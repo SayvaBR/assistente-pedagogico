@@ -34,7 +34,7 @@ class TeacherStoreV7MigrationTest {
                 "CREATE TABLE students (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, name TEXT NOT NULL)",
                 "CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, title TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL, objective TEXT NOT NULL, content TEXT NOT NULL, method TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)",
                 "CREATE TABLE attendance (classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE, day TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('P','F')), PRIMARY KEY(student_id,day))",
-                "CREATE TABLE observations (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, student_id INTEGER REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL, body TEXT NOT NULL, day TEXT NOT NULL, share_approved INTEGER NOT NULL DEFAULT 0)",
+                "CREATE TABLE observations (id INTEGER PRIMARY KEY AUTOINCREMENT, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE SET NULL, student_id INTEGER REFERENCES students(id) ON DELETE SET NULL, kind TEXT NOT NULL, body TEXT NOT NULL, day TEXT NOT NULL, share_approved INTEGER NOT NULL DEFAULT 0)",
                 "CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL)",
                 "CREATE TABLE saved_files (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uri TEXT NOT NULL UNIQUE)",
             ).forEach(db::execSQL)
@@ -58,7 +58,7 @@ class TeacherStoreV7MigrationTest {
     @Test fun v6UpgradeKeepsExistingDataAndActivitiesPersistAfterReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(LessonStatusV8.VERSION, first.readableDatabase.version)
+        assertEquals(PlanLayoutV9.VERSION, first.readableDatabase.version)
         assertEquals("Plano histórico", first.read().lessons.single { it.id == 17L }.title)
         assertEquals(LessonStatus.DRAFT, first.read().lessons.single { it.id == 17L }.status)
         assertEquals("10:00", first.read().appointments.single().time)
@@ -74,7 +74,7 @@ class TeacherStoreV7MigrationTest {
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(LessonStatusV8.VERSION, reopened.readableDatabase.version)
+        assertEquals(PlanLayoutV9.VERSION, reopened.readableDatabase.version)
         assertEquals(id, reopened.listActivities(7, 17).single().id)
         assertTrue(reopened.listActivities(8).isEmpty())
         assertEquals(31L, reopened.read().files.single().id)
