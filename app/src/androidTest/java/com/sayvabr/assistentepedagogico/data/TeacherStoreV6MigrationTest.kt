@@ -59,10 +59,10 @@ class TeacherStoreV6MigrationTest {
         if (emulator) context.deleteDatabase("pedagogico.db")
     }
 
-    @Test fun v5ToV6KeepsAllRecordsAndAddsSafeLessonDefaultsAcrossReopen() {
+    @Test fun v5ToV8KeepsAllRecordsAndAddsSafeLessonDefaultsAcrossReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(LessonActivityV7.VERSION, first.readableDatabase.version)
+        assertEquals(LessonStatusV8.VERSION, first.readableDatabase.version)
         val snapshot = first.read()
         assertEquals("Docente Fictícia", snapshot.profile?.name)
         assertEquals(31L, snapshot.classrooms.single().id)
@@ -78,6 +78,7 @@ class TeacherStoreV6MigrationTest {
         assertEquals("Mudanças de estado", original.content)
         assertEquals("Experimento", original.method)
         assertTrue(original.archived)
+        assertEquals(LessonStatus.ARCHIVED, original.status)
         assertEquals(50, original.durationMinutes)
         assertEquals("", original.bnccCodes)
         assertEquals("", original.opening)
@@ -98,13 +99,13 @@ class TeacherStoreV6MigrationTest {
         assertTrue(snapshot.files.single().favorite)
         assertFalse(snapshot.folders.any())
 
-        // Running the migration twice is safe, including after SQLiteOpenHelper upgrades the version.
         LessonPlanV6.migrate(first.writableDatabase)
+        LessonStatusV8.migrate(first.writableDatabase)
         assertEquals(snapshot, first.read())
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(LessonActivityV7.VERSION, reopened.readableDatabase.version)
+        assertEquals(LessonStatusV8.VERSION, reopened.readableDatabase.version)
         assertEquals(snapshot, reopened.read())
     }
 }
