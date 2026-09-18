@@ -9,7 +9,8 @@ import org.json.JSONObject
  */
 object TeacherBackupCodec {
     const val FORMAT = "assistente-pedagogico-backup"
-    // v5 appointment attributes extend v1 with optional keys; existing v1 files remain readable.
+    // v5 appointments and v6 lesson-plan attributes extend v1 with optional keys;
+    // existing v1 files remain readable because the envelope version did not change.
     const val VERSION = 1
 
     fun encode(snapshot: TeacherSnapshot): String = JSONObject().apply {
@@ -24,8 +25,13 @@ object TeacherBackupCodec {
         }) } })
         put("lessons", JSONArray().apply { snapshot.lessons.forEach { l -> put(JSONObject().apply {
             put("id", l.id); put("classroomId", l.classroomId); put("title", l.title); put("subject", l.subject)
-            put("date", l.date); put("time", l.time); put("objective", l.objective); put("content", l.content)
-            put("method", l.method); put("archived", l.archived)
+            put("date", l.date); put("time", l.time); put("durationMinutes", l.durationMinutes)
+            put("objective", l.objective); put("specificObjectives", l.specificObjectives); put("content", l.content)
+            put("bnccCodes", l.bnccCodes); put("justification", l.justification); put("method", l.method)
+            put("opening", l.opening); put("openingMinutes", l.openingMinutes)
+            put("development", l.development); put("developmentMinutes", l.developmentMinutes)
+            put("closing", l.closing); put("closingMinutes", l.closingMinutes)
+            put("assessment", l.assessment); put("adaptations", l.adaptations); put("archived", l.archived)
         }) } })
         put("attendance", JSONArray().apply { snapshot.attendance.forEach { a -> put(JSONObject().apply {
             put("classroomId", a.classroomId); put("studentId", a.studentId); put("date", a.date); put("status", a.status)
