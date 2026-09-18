@@ -22,5 +22,13 @@ fun TeacherStore.exportBackupPayload(): String {
         )
     }
     val activities = snapshot.classrooms.flatMap { listActivities(it.id) }
-    return TeacherBackupCodec.encode(snapshot.copy(files = fullCatalog), activities)
+    val archiveOrigins = mutableMapOf<Long, LessonStatus>()
+    readableDatabase.rawQuery("SELECT id,status_before_archive FROM lessons WHERE pedagogical_status='archived'", null).use { cursor ->
+        while (cursor.moveToNext()) {
+            val previous = LessonStatus.parse(cursor.getString(1))
+            require(previous != LessonStatus.ARCHIVED) { "Estado anterior de plano inválido no banco." }
+            archiveOrigins[cursor.getLong(0)] = previous
+        }
+    }
+    return TeacherBackupCodec.encode(snapshot.copy(files = fullCatalog), activities, archiveOrigins)
 }
