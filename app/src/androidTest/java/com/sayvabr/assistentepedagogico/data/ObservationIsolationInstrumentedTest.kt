@@ -66,4 +66,24 @@ class ObservationIsolationInstrumentedTest {
         assertNull(saved[0].studentId)
         assertEquals(aliceId, saved[1].studentId)
     }
+
+    @Test fun unknownStudentIdIsRejectedWithoutMutationAndLegitimateCreationStillWorks() {
+        val first = requireNotNull(store)
+        val classroom = first.createClass("Turma sintética", "Ensino Fundamental", "Matutino")
+        try {
+            first.addObservation(classroom, 999_999L, "Aprendizagem", "Aluno inexistente na turma.", false)
+            fail("Expected a controlled rejection for an unknown student ID")
+        } catch (_: IllegalArgumentException) {
+            // Validate belonging before attempting a foreign-key insertion.
+        }
+        assertEquals(0, first.read().observations.size)
+        first.addStudent(classroom, "Aluno fictício")
+        val validStudent = first.read().students.single().id
+        first.addObservation(classroom, validStudent, "Aprendizagem", "Registro legítimo após rejeição.", false)
+        first.close()
+        store = TeacherStore(context)
+        val saved = requireNotNull(store).read().observations.single()
+        assertEquals(classroom, saved.classroomId)
+        assertEquals(validStudent, saved.studentId)
+    }
 }

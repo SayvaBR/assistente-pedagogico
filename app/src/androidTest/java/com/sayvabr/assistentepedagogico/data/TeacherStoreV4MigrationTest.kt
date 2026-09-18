@@ -39,6 +39,7 @@ class TeacherStoreV4MigrationTest {
             ).forEach(db::execSQL)
             db.execSQL("INSERT INTO saved_files(id,name,uri) VALUES (13,'Documento A','content://synthetic/a')")
             db.execSQL("INSERT INTO saved_files(id,name,uri) VALUES (14,'Documento B','content://synthetic/b')")
+            db.execSQL("INSERT INTO appointments(id,title,day,time) VALUES (47,'Reunião anterior','2026-09-21','08:00')")
             db.version = 3
         } finally { db.close() }
     }
@@ -52,9 +53,16 @@ class TeacherStoreV4MigrationTest {
     @Test fun migrationPreservesLegacyIdentityAllowsOrganizationAndReopensSafely() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(4, first.readableDatabase.version)
+        assertEquals(PlanLayoutV9.VERSION, first.readableDatabase.version)
         assertEquals(listOf(14L, 13L), first.read().files.map { it.id })
         assertEquals("content://synthetic/a", first.read().files.single { it.id == 13L }.uri)
+        val formerEvent = first.read().appointments.single()
+        assertEquals(47L, formerEvent.id)
+        assertEquals("Reunião anterior", formerEvent.title)
+        assertEquals("08:00", formerEvent.time)
+        assertEquals("08:00", formerEvent.endTime)
+        assertEquals("Outro", formerEvent.type)
+        assertNull(formerEvent.classroomId)
         val folder = first.createFolder("Materiais")
         first.moveFile(13, folder)
         first.setFileFavorite(13, true)
@@ -64,7 +72,8 @@ class TeacherStoreV4MigrationTest {
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(4, reopened.readableDatabase.version)
+        assertEquals(PlanLayoutV9.VERSION, reopened.readableDatabase.version)
+        assertEquals(formerEvent, reopened.read().appointments.single())
         val trashed = reopened.libraryFiles().single { it.id == 13L }
         assertEquals(folder, trashed.folderId)
         assertTrue(trashed.favorite)
@@ -93,7 +102,7 @@ class TeacherStoreV4MigrationTest {
         assertNull(restored.trashedAt)
         assertEquals(folder, restored.folderId)
         assertTrue(restored.favorite)
-        assertEquals("Documento A", restored.name) // Keep any teacher-chosen catalog rename.
+        assertEquals("Documento A", restored.name)
         assertEquals("available", restored.accessState)
         assertEquals(2, first.libraryFiles().size)
 

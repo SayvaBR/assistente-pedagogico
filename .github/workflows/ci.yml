@@ -28,5 +28,23 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # Debug assembly remains an internal quality gate. Do not upload APK artifacts
-      # routinely; a preview must be explicitly re-enabled for a specific owner request.
+      # The owner explicitly requested a disposable PR #15 debug APK for real-device testing.
+      # Refuse a wrong-commit binary and any missing/empty output; this is not a release.
+      - name: Check APK and record build provenance
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15
+        env:
+          head_sha: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          test "$(git rev-parse HEAD)" = "$head_sha"
+          sha256sum "$apk"
+      - name: Upload installable debug preview APK (3-day retention)
+        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 3

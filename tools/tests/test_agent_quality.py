@@ -55,12 +55,12 @@ class AuditContractTest(unittest.TestCase):
             "- name: Build, unit test, lint and compile instrumentation tests",
             "  run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest",
             "- name: Check APK and record build provenance",
-            "  if: github.event_name == 'pull_request' && github.event.pull_request.number == 13",
+            "  if: github.event_name == 'pull_request' && github.event.pull_request.number == 15",
             "  run: |", "    apk=app/build/outputs/apk/debug/app-debug.apk",
             "    test -s \"$apk\"",
             '    test "$(git rev-parse HEAD)" = "$head_sha"',
             "- name: Upload installable preview APK (3-day retention)",
-            "  if: github.event_name == 'pull_request' && github.event.pull_request.number == 13",
+            "  if: github.event_name == 'pull_request' && github.event.pull_request.number == 15",
             "  uses: actions/upload-artifact@v4",
             "  with:",
             "    name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}",
@@ -68,7 +68,7 @@ class AuditContractTest(unittest.TestCase):
         ))
         self.write(".github/workflows/ci.yml", ci)
         self.assertEqual([], audit(self.root))
-        self.write(".github/workflows/ci.yml", ci.replace("github.event.pull_request.number == 13", "github.event.pull_request.number >= 1"))
+        self.write(".github/workflows/ci.yml", ci.replace("github.event.pull_request.number == 15", "github.event.pull_request.number >= 1"))
         self.assertTrue(any("scoped owner authorization" in issue for issue in audit(self.root)))
         self.write(".github/workflows/ci.yml", ci.replace("retention-days: 3", "retention-days: 90"))
         self.assertTrue(any("long-lived" in issue or "scoped owner authorization" in issue for issue in audit(self.root)))

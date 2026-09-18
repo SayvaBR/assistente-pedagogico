@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Capture REAL Android screens using ADB; no mocked/rendered UI.
+"""Capture genuine Android emulator UI with synthetic records only.
 
-Run after installing/launching the debug APK on an Android emulator. Only
-synthetic test values are entered. Captures are stored under visual-evidence/.
+A capture is evidence of what the running app rendered, NEVER a generated mockup.
+Fail when navigation cannot be proven and retain diagnostic images for debugging.
 """
 from pathlib import Path
 import re
@@ -23,68 +23,110 @@ def screenshot(name):
     path = OUT / f'{name}.png'
     for attempt in range(3):
         try:
-            result = subprocess.run(['adb', 'exec-out', 'screencap', '-p'], check=True, capture_output=True)
-            if result.stdout.startswith(b'\x89PNG\r\n\x1a\n') and len(result.stdout) > 1000:
-                path.write_bytes(result.stdout)
-                print(f'CAPTURED: {path} ({len(result.stdout)} bytes)', flush=True)
-                return
-            raise RuntimeError(f'Invalid screenshot stream: {len(result.stdout)} bytes')
+            image = adb('exec-out', 'screencap', '-p', text=False)
+            if not image.startswith(b'\x89PNG\r\n\x1a\n') or len(image) < 1000:
+                raise RuntimeError('Android returned an invalid PNG screenshot')
+            path.write_bytes(image)
+            print(f'CAPTURED {path} ({len(image)} bytes)', flush=True)
+            return
         except Exception:
             if attempt == 2:
                 raise
             time.sleep(2)
 
 
-def nodes():
+def hierarchy():
     adb('shell', 'uiautomator', 'dump', '/sdcard/window.xml')
     raw = adb('exec-out', 'cat', '/sdcard/window.xml')
-    return list(ET.fromstring(raw).iter('node'))
+    root = ET.fromstring(raw)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    return root, parents
 
 
-def _tap_bounds(bounds):
-    parts = re.findall(r'\d+', bounds)
+def bounds(node):
+    parts = re.findall(r'\d+', node.get('bounds', ''))
     if len(parts) != 4:
-        return False
-    x1, y1, x2, y2 = map(int, parts)
+        raise ValueError('Android UI element has invalid bounds')
+    return tuple(map(int, parts))
+
+
+def tap(node):
+    x1, y1, x2, y2 = bounds(node)
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError('Android UI element has empty bounds')
     adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
-    return True
+    time.sleep(1.6)
 
 
-def tap_text(target, exact=False, clickable_only=False):
-    candidates = nodes()
-    for item in candidates:
-        text = item.get('text', '')
-        desc = item.get('content-desc', '')
-        matched = (
-            target.casefold() in {text.casefold(), desc.casefold()}
-            if exact else
-            target.casefold() in ' '.join([text, desc]).casefold()
-        )
-        if not matched:
-            continue
-        if clickable_only and item.get('clickable') != 'true':
-            continue
-        if _tap_bounds(item.get('bounds', '')):
-            time.sleep(1.4)
-            print(f'TAPPED: {target}', flush=True)
+def tap_text(target, exact=False):
+    root, _ = hierarchy()
+    for node in root.iter('node'):
+        texts = (node.get('text', ''), node.get('content-desc', ''))
+        found = any(t.casefold() == target.casefold() for t in texts) if exact else any(target.casefold() in t.casefold() for t in texts)
+        if found:
+            tap(node)
             return
-    known = [' '.join([n.get('text', ''), n.get('content-desc', '')]) for n in candidates]
-    raise RuntimeError(f'Cannot find {target!r} in Android UI hierarchy. Visible: {known[:65]}')
+    raise RuntimeError(f'Cannot find action {target!r}; visible labels: {[n.get("text") for n in root.iter("node") if n.get("text")][:40]}')
+
+
+def device_height():
+    text = adb('shell', 'wm', 'size')
+    matches = re.findall(r'(\d+)x(\d+)', text)
+    if not matches:
+        raise RuntimeError(f'Cannot obtain screen resolution: {text}')
+    return int(matches[-1][1])
 
 
 def tap_tab(label):
-    tap_text(label, exact=True, clickable_only=True)
+    """Select an exact label within the bottom bar and tap its clickable ancestor.
+
+    Compose often marks a parent clickable, but its Text child is not clickable.
+    Matching a word in the body (e.g. 'Ver planejamento') was a false positive.
+    """
+    root, parents = hierarchy()
+    lower_limit = device_height() * .73
+    candidates = []
+    for node in root.iter('node'):
+        if label.casefold() not in (node.get('text', '').casefold(), node.get('content-desc', '').casefold()):
+            continue
+        item = node
+        while item is not None and item.get('clickable') != 'true':
+            item = parents.get(item)
+        if item is None:
+            continue
+        x1, y1, x2, y2 = bounds(item)
+        if (y1 + y2) / 2 >= lower_limit:
+            candidates.append((y1, item))
+    if not candidates:
+        raise RuntimeError(f'Bottom tab {label!r} not found in the bottom 27% of the display')
+    tap(max(candidates, key=lambda pair: pair[0])[1])
 
 
-def wait_for_text(anchor, timeout=6):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        for item in nodes():
-            values = {item.get('text', '').casefold(), item.get('content-desc', '').casefold()}
-            if anchor.casefold() in values:
-                return
-        time.sleep(.5)
-    raise RuntimeError(f'Expected destination text {anchor!r} did not appear within {timeout}s; navigation likely failed silently.')
+def visible_anchor(root, anchor):
+    """Screen anchors may contain suffix punctuation, e.g. 'Vamos criar sua turma?'.
+
+    Always match a meaningful whole phrase, not the tiny tab substring that previously
+    allowed duplicate/incorrect captures. A former tuple membership test accidentally
+    required exact equality and rejected the correct destination with a question mark.
+    """
+    needle = anchor.casefold()
+    return any(
+        needle in candidate.casefold()
+        for node in root.iter('node')
+        for candidate in (node.get('text', ''), node.get('content-desc', ''))
+    )
+
+
+def wait_for_text(anchor, timeout=12):
+    until = time.monotonic() + timeout
+    while time.monotonic() < until:
+        root, _ = hierarchy()
+        if visible_anchor(root, anchor):
+            return
+        time.sleep(.7)
+    root, _ = hierarchy()
+    visible = [n.get('text', '') for n in root.iter('node') if n.get('text', '')]
+    raise RuntimeError(f'Destination marker {anchor!r} never appeared; actual visible texts: {visible[:36]!r}')
 
 
 def write_field(label, value):
@@ -105,33 +147,35 @@ try:
     screenshot('04-perfil-inicial')
     write_field('Seu nome', 'ProfessoraTeste')
     tap_text('Continuar')
+    wait_for_text('Vamos criar sua turma')
     screenshot('05-criar-turma')
     write_field('Nome da turma', 'TurmaTeste')
     tap_text('Criar turma')
+    wait_for_text('Organize suas classes e alunos')
     screenshot('06-turmas')
 
     tap_tab('Início')
     wait_for_text('Que bom ter você aqui hoje')
     screenshot('07-home')
-
     tap_tab('Planejamento')
     wait_for_text('Suas aulas por dia, semana e mês')
     screenshot('08-planejamento')
-
+    tap_tab('Arquivos')
+    wait_for_text('SEU ESPAÇO DE TRABALHO')
+    screenshot('09-arquivos')
     tap_tab('Turmas')
     wait_for_text('Organize suas classes e alunos')
     tap_text('TurmaTeste', exact=True)
     wait_for_text('Sua turma')
-    screenshot('09-detalhe-turma')
-
-    tap_text('Frequência', exact=True, clickable_only=True)
+    screenshot('10-detalhe-turma')
+    tap_text('Frequência', exact=True)
     wait_for_text('Pendentes')
-    screenshot('10-frequencia')
-    print('SUCCESS: ten screens captured from the running Android app.', flush=True)
+    screenshot('11-frequencia')
+    print('SUCCESS: 11 genuine captures from the running app, verified by screen-specific markers.', flush=True)
 except Exception as error:
-    print(f'SCREENSHOT FLOW FAILED (previous captures retained): {error}', file=sys.stderr, flush=True)
+    print(f'ANDROID SCREENSHOT FLOW FAILED: {error}', file=sys.stderr, flush=True)
     try:
         screenshot('error-current-screen')
     except Exception as capture_error:
-        print(f'Also failed capturing diagnostic screenshot: {capture_error}', file=sys.stderr)
+        print(f'Could not capture failure state: {capture_error}', file=sys.stderr, flush=True)
     raise

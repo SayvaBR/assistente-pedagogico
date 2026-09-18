@@ -259,32 +259,46 @@ fun TeacherApp(store: TeacherStore) {
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { requestNavigate(it) },
                         openLesson = { lessonId -> selectedLesson = lessonId; requestNavigate("editLesson") },
                         restoreLesson = { lesson -> commit("planning") { store.setLessonArchived(lesson.classroomId, lesson.id, false) } })
-                    "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { requestBack() },
-                        { title, subject, day, time, objective, content, method ->
-                            commit("planning", onSuccess = { selectedDay = day }) {
-                                store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method)
-                            }
-                        }, onDirty = { formDirty = true })
+                    "activities" -> PlanningActivitiesScreen(
+                        store = store,
+                        classroom = currentClass,
+                        lessons = snapshot.lessons,
+                        back = { requestBack() },
+                        onDirty = { formDirty = it },
+                    )
+                    "newLesson" -> if (currentClass != null) LessonEditorV6(
+                        classroom = currentClass, initialDay = selectedDay, back = { requestBack() },
+                        save = { input -> commit("planning", onSuccess = { selectedDay = input.day }) {
+                            store.saveLesson(input, currentClass.id)
+                        } }, onDirty = { formDirty = true })
                     "editLesson" -> snapshot.lessons.firstOrNull { it.id == selectedLesson && !it.archived }?.let { lesson ->
                         snapshot.classrooms.firstOrNull { it.id == lesson.classroomId && !it.archived }?.let { lessonClass ->
-                            LessonForm(lessonClass, lesson.date, { requestBack() }, { title, subject, day, time, objective, content, method ->
-                                commit("planning", onSuccess = { selectedDay = day }) {
-                                    store.updateLesson(lessonClass.id, lesson.id, title, subject, day, time, objective, content, method)
-                                }
-                            }, initial = lesson, archive = { commit("planning") { store.setLessonArchived(lessonClass.id, lesson.id, true) } },
+                            LessonEditorV6(
+                                classroom = lessonClass, initialDay = lesson.date, initial = lesson, back = { requestBack() },
+                                save = { input -> commit("planning", onSuccess = { selectedDay = input.day }) {
+                                    store.updateLesson(lessonClass.id, lesson.id, input)
+                                } },
+                                archive = { commit("planning") { store.setLessonArchived(lessonClass.id, lesson.id, true) } },
+                                duplicate = { commit("planning", onSuccess = { selectedDay = lesson.date }) {
+                                    store.duplicateLesson(lessonClass.id, lesson.id)
+                                } },
                                 onDirty = { formDirty = true })
                         }
                     } ?: Panel { Text("Plano indisponível. Retorne ao Planejamento.", color = ink); PrimaryButton("Voltar ao planejamento") { navigate("planning", root = true) } }
                     "agenda" -> AgendaScreen(snapshot, selectedDay, { selectedDay = it }, { requestNavigate("newAppointment") }, { appointmentId ->
                         selectedAppointment = appointmentId; requestNavigate("editAppointment")
-                    })
-                    "newAppointment" -> AppointmentForm(selectedDay, { requestBack() }, { title, day, time ->
-                        commit("agenda", onSuccess = { selectedDay = day }) { store.addAppointment(title, day, time) }
-                    }, onDirty = { formDirty = true })
+                    }, { lessonId -> selectedLesson = lessonId; requestNavigate("editLesson") })
+                    "newAppointment" -> AppointmentEditorV5(initialDay = selectedDay, classes = snapshot.classrooms,
+                        back = { requestBack() }, save = { input ->
+                            commit("agenda", onSuccess = { selectedDay = input.day }) { store.addAppointment(input) }
+                        }, onDirty = { formDirty = true })
                     "editAppointment" -> snapshot.appointments.firstOrNull { it.id == selectedAppointment }?.let { appointment ->
-                        AppointmentForm(appointment.date, { requestBack() }, { title, day, time ->
-                            commit("agenda", onSuccess = { selectedDay = day }) { store.updateAppointment(appointment.id, title, day, time) }
-                        }, initial = appointment, delete = { commit("agenda") { store.deleteAppointment(appointment.id) } },
+                        AppointmentEditorV5(initialDay = appointment.date, classes = snapshot.classrooms,
+                            initial = appointment, back = { requestBack() }, save = { input ->
+                                commit("agenda", onSuccess = { selectedDay = input.day }) {
+                                    store.updateAppointment(appointment.id, input)
+                                }
+                            }, delete = { commit("agenda") { store.deleteAppointment(appointment.id) } },
                             onDirty = { formDirty = true })
                     }
                     "files" -> FileCatalogScreen(
@@ -294,11 +308,7 @@ fun TeacherApp(store: TeacherStore) {
                             try { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(file.uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
                             catch (e: Exception) { error = "Não foi possível abrir este arquivo. Verifique se ele ainda existe e se há um aplicativo compatível." }
                         },
-                        renameFile = { file, newName -> commit("files") { store.renameFile(file.id, newName) } },
-                        removeFile = { file -> commit("files") {
-                            store.removeFile(file.id)
-                            runCatching { context.contentResolver.releasePersistableUriPermission(android.net.Uri.parse(file.uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-                        } })
+                        renameFile = { file, newName -> commit("files") { store.renameFile(file.id, newName) } })
                     "more" -> MoreScreen(snapshot, { requestNavigate(it) })
                     "profile" -> ProfileForm(snapshot.profile.name, { requestBack() },
                         { name -> commit("more") { store.saveProfile(name) } }, onDirty = { formDirty = true })
@@ -762,43 +772,7 @@ fun TeacherApp(store: TeacherStore) {
 
 @Composable private fun PlanningScreen(data: TeacherSnapshot, classroom: Classroom?, day: String, onDay: (String) -> Unit,
     go: (String) -> Unit, openLesson: (Long) -> Unit, restoreLesson: (Lesson) -> Unit) {
-    Heading("Planejamento", "Suas aulas por dia, semana e mês")
-    var view by rememberSaveable { mutableStateOf("Dia") }
-    ApSegmentedControl(listOf("Dia", "Semana", "Mês", "Arquivados"), view) { view = it }
-    Spacer(Modifier.height(12.dp))
-    val focus = LocalDate.parse(day)
-    val start = when (view) { "Semana" -> focus.minusDays((focus.dayOfWeek.value - 1).toLong()); "Mês" -> focus.withDayOfMonth(1); else -> focus }
-    val end = when (view) { "Semana" -> start.plusDays(6); "Mês" -> start.plusMonths(1).minusDays(1); else -> focus }
-    if (view == "Dia") DaySwitch(day, onDay)
-    else if (view != "Arquivados") {
-        Panel {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("‹", Modifier.clickable { onDay(if (view == "Semana") focus.minusWeeks(1).toString() else focus.minusMonths(1).toString()) }.padding(6.dp), color = blue, fontSize = 29.sp)
-                Text(if (view == "Semana") "${start.format(DateTimeFormatter.ofPattern("dd/MM"))} – ${end.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))}"
-                    else start.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale("pt", "BR"))).replaceFirstChar { it.uppercase() }, color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-                Text("›", Modifier.clickable { onDay(if (view == "Semana") focus.plusWeeks(1).toString() else focus.plusMonths(1).toString()) }.padding(6.dp), color = blue, fontSize = 29.sp)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-    }
-    val lessons = data.lessons.filter { lesson ->
-        lesson.classroomId == classroom?.id && if (view == "Arquivados") lesson.archived else !lesson.archived && lesson.date >= start.toString() && lesson.date <= end.toString()
-    }.sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
-    Subtitle(if (view == "Arquivados") "Planos arquivados (${lessons.size})" else "${lessons.size} aula(s) neste período")
-    if (classroom == null) Panel { Text("Crie ou restaure uma turma para consultar seus planos.", color = ink) }
-    else if (lessons.isEmpty()) Panel { Text(if (view == "Arquivados") "Nenhum plano arquivado nesta turma." else "Nenhum plano neste período. Use o botão abaixo para planejar sua próxima aula.", color = ink) }
-    lessons.forEach { lesson ->
-        Panel {
-            Text("${lesson.date} • ${lesson.time} • ${lesson.subject}", fontSize = 13.sp, color = blue, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp)); Text(lesson.title, fontSize = 19.sp, color = ink, fontWeight = FontWeight.Black)
-            Spacer(Modifier.height(9.dp)); Text("Objetivo: ${lesson.objective}", fontSize = 14.sp, color = ink)
-            if (lesson.content.isNotEmpty()) Text("Conteúdo: ${lesson.content}", fontSize = 13.sp, color = ink)
-            if (lesson.method.isNotEmpty()) Text("Metodologia: ${lesson.method}", fontSize = 13.sp, color = ink)
-            Spacer(Modifier.height(12.dp)); if (lesson.archived) PrimaryButton("Restaurar plano") { restoreLesson(lesson) } else PrimaryButton("Abrir e editar plano") { openLesson(lesson.id) }
-        }
-        Spacer(Modifier.height(9.dp))
-    }
-    Spacer(Modifier.height(12.dp)); if (classroom != null && view != "Arquivados") PrimaryButton("+ Adicionar aula") { go("newLesson") }
+    PlanningWorkspace(data, classroom, day, onDay, go, openLesson, restoreLesson)
 }
 
 @Composable private fun LessonForm(classroom: Classroom, initialDay: String, back: () -> Unit,
@@ -832,34 +806,9 @@ fun TeacherApp(store: TeacherStore) {
         dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancelar") } })
 }
 
-@Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit, add: () -> Unit, open: (Long) -> Unit) {
-    Heading("Compromissos", "Organize sua rotina e foque no que importa")
-    DaySwitch(day, onDay); Subtitle("Agenda do dia")
-    val events = data.appointments.filter { it.date == day }
-    if (events.isEmpty()) Panel { Text("Nenhum compromisso para esta data.", color = ink) }
-    events.forEach { item -> ActionTile(ApGlyphKind.CALENDAR, item.title, item.time) { open(item.id) } }
-    Spacer(Modifier.height(12.dp)); PrimaryButton("+ Novo compromisso", click = add)
-}
-
-@Composable private fun AppointmentForm(initialDay: String, back: () -> Unit, save: (String, String, String) -> Unit,
-    initial: Appointment? = null, delete: (() -> Unit)? = null, onDirty: () -> Unit = {}) {
-    var title by rememberSaveable(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
-    var day by rememberSaveable(initial?.id) { mutableStateOf(initial?.date ?: initialDay) }
-    var time by rememberSaveable(initial?.id) { mutableStateOf(initial?.time ?: "08:00") }
-    var confirmDeletion by remember { mutableStateOf(false) }
-    Heading(if (initial == null) "Novo compromisso" else "Editar compromisso", "Organize sua agenda", back)
-    Panel {
-        Input("Título do compromisso", title, { if (it != title) { title = it; onDirty() } })
-        Input("Data (AAAA-MM-DD)", day, { if (it != day) { day = it; onDirty() } })
-        Input("Horário (HH:MM)", time, { if (it != time) { time = it; onDirty() } })
-        PrimaryButton(if (initial == null) "Salvar compromisso" else "Salvar alterações") { save(title, day, time) }
-        if (delete != null) { Spacer(Modifier.height(12.dp)); PrimaryButton("Excluir compromisso", secondary = true) { confirmDeletion = true } }
-    }
-    if (confirmDeletion && delete != null) AlertDialog(
-        onDismissRequest = { confirmDeletion = false }, title = { Text("Excluir compromisso?") },
-        text = { Text("Esta exclusão é permanente e afeta somente este compromisso.") },
-        confirmButton = { TextButton(onClick = { confirmDeletion = false; delete() }) { Text("Excluir definitivamente") } },
-        dismissButton = { TextButton(onClick = { confirmDeletion = false }) { Text("Cancelar") } })
+@Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit,
+    add: () -> Unit, open: (Long) -> Unit, openLesson: (Long) -> Unit) {
+    PlanningAgendaScreen(data, day, onDay, add, open, openLesson)
 }
 
 @Composable private fun MoreScreen(data: TeacherSnapshot, go: (String) -> Unit) {

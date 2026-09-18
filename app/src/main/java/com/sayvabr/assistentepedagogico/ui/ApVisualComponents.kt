@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -24,197 +23,55 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** Shared visual primitives for the product's white/blue tactile UI. No gradients or blurred shadows. */
-enum class ApGlyphKind {
-    DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLDER,
-    HOME, CALENDAR, USERS, MORE, STAR, RESTORE, PLUS, CHECK
-}
+enum class ApGlyphKind { DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLDER, HOME, CALENDAR, USERS, MORE, STAR, RESTORE, PLUS, CHECK, CLOCK, NOTE }
 
-/** Rounded-stroke glyphs with one visual language while the app migrates away from emoji/font symbols. */
-@Composable
-fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color: Color = ApColors.Navy) {
+@Composable fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color: Color = ApColors.Navy) {
     Canvas(modifier) {
-        val u = size.minDimension
-        val w = u * .082f
-        val line = Stroke(width = w, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        fun segment(x1: Float, y1: Float, x2: Float, y2: Float) =
-            drawLine(color, Offset(x1 * u, y1 * u), Offset(x2 * u, y2 * u), strokeWidth = w, cap = StrokeCap.Round)
-        when (kind) {
-            ApGlyphKind.DOCUMENT -> {
-                drawRoundRect(color, topLeft = Offset(.24f * u, .12f * u), size = Size(.52f * u, .75f * u), cornerRadius = CornerRadius(.07f * u), style = line)
-                segment(.34f, .46f, .66f, .46f); segment(.34f, .60f, .66f, .60f)
-            }
-            ApGlyphKind.SEARCH -> {
-                drawCircle(color, radius = .245f * u, center = Offset(.42f * u, .42f * u), style = line)
-                segment(.60f, .61f, .85f, .86f)
-            }
-            ApGlyphKind.BACK -> { segment(.65f, .18f, .34f, .50f); segment(.34f, .50f, .65f, .82f) }
-            ApGlyphKind.IMPORT -> {
-                segment(.50f, .12f, .50f, .67f); segment(.28f, .47f, .50f, .69f)
-                segment(.50f, .69f, .72f, .47f); segment(.19f, .84f, .81f, .84f)
-            }
-            ApGlyphKind.OPEN -> {
-                drawRoundRect(color, topLeft = Offset(.13f * u, .29f * u), size = Size(.56f * u, .57f * u), cornerRadius = CornerRadius(.08f * u), style = line)
-                segment(.50f, .13f, .87f, .13f); segment(.87f, .13f, .87f, .50f); segment(.87f, .13f, .45f, .55f)
-            }
-            ApGlyphKind.EDIT -> {
-                segment(.23f, .70f, .66f, .27f); segment(.32f, .80f, .75f, .37f)
-                segment(.23f, .70f, .19f, .84f); segment(.19f, .84f, .32f, .80f)
-            }
-            ApGlyphKind.TRASH -> {
-                drawRoundRect(color, topLeft = Offset(.27f * u, .32f * u), size = Size(.46f * u, .53f * u), cornerRadius = CornerRadius(.05f * u), style = line)
-                segment(.19f, .23f, .81f, .23f); segment(.40f, .13f, .60f, .13f)
-                segment(.42f, .44f, .42f, .71f); segment(.58f, .44f, .58f, .71f)
-            }
-            ApGlyphKind.FOLDER -> {
-                drawRoundRect(color, topLeft = Offset(.13f * u, .35f * u), size = Size(.74f * u, .48f * u), cornerRadius = CornerRadius(.07f * u), style = line)
-                segment(.17f, .35f, .17f, .22f); segment(.17f, .22f, .43f, .22f); segment(.43f, .22f, .55f, .35f)
-            }
-            ApGlyphKind.HOME -> {
-                segment(.16f, .48f, .50f, .18f); segment(.50f, .18f, .84f, .48f)
-                segment(.24f, .43f, .24f, .83f); segment(.76f, .43f, .76f, .83f); segment(.24f, .83f, .76f, .83f)
-            }
-            ApGlyphKind.CALENDAR -> {
-                drawRoundRect(color, topLeft = Offset(.16f*u,.24f*u), size = Size(.68f*u,.60f*u), cornerRadius = CornerRadius(.08f*u), style = line)
-                segment(.16f,.41f,.84f,.41f); segment(.32f,.13f,.32f,.31f); segment(.68f,.13f,.68f,.31f)
-                segment(.34f,.56f,.43f,.56f); segment(.57f,.56f,.66f,.56f); segment(.34f,.69f,.43f,.69f)
-            }
-            ApGlyphKind.USERS -> {
-                drawCircle(color, radius = .15f*u, center = Offset(.40f*u,.36f*u), style = line)
-                drawCircle(color, radius = .12f*u, center = Offset(.70f*u,.42f*u), style = line)
-                drawArc(color, 205f, 130f, false, topLeft = Offset(.15f*u,.48f*u), size = Size(.50f*u,.38f*u), style = line)
-                drawArc(color, 215f, 105f, false, topLeft = Offset(.52f*u,.56f*u), size = Size(.34f*u,.27f*u), style = line)
-            }
-            ApGlyphKind.MORE -> {
-                drawCircle(color, radius = .055f*u, center = Offset(.25f*u,.50f*u))
-                drawCircle(color, radius = .055f*u, center = Offset(.50f*u,.50f*u))
-                drawCircle(color, radius = .055f*u, center = Offset(.75f*u,.50f*u))
-            }
-            ApGlyphKind.STAR -> {
-                val p = listOf(.50f to .13f, .60f to .39f, .88f to .40f, .66f to .57f, .74f to .84f, .50f to .68f, .26f to .84f, .34f to .57f, .12f to .40f, .40f to .39f)
-                for (i in p.indices) { val a=p[i]; val b=p[(i+1)%p.size]; segment(a.first,a.second,b.first,b.second) }
-            }
-            ApGlyphKind.RESTORE -> {
-                drawArc(color, 45f, 285f, false, topLeft = Offset(.18f*u,.18f*u), size = Size(.64f*u,.64f*u), style = line)
-                segment(.18f,.29f,.18f,.55f); segment(.18f,.29f,.43f,.29f)
-            }
-            ApGlyphKind.PLUS -> { segment(.50f,.20f,.50f,.80f); segment(.20f,.50f,.80f,.50f) }
-            ApGlyphKind.CHECK -> { segment(.20f,.52f,.42f,.72f); segment(.42f,.72f,.80f,.28f) }
+        val u = size.minDimension; val w = u * .085f; val line = Stroke(width = w, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        fun segment(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, Offset(x1*u,y1*u), Offset(x2*u,y2*u), strokeWidth=w, cap=StrokeCap.Round)
+        when(kind) {
+            ApGlyphKind.DOCUMENT, ApGlyphKind.NOTE -> { drawRoundRect(color, Offset(.24f*u,.12f*u), Size(.52f*u,.75f*u), CornerRadius(.07f*u), style=line); segment(.34f,.46f,.66f,.46f); segment(.34f,.60f,.66f,.60f) }
+            ApGlyphKind.SEARCH -> { drawCircle(color,.245f*u,Offset(.42f*u,.42f*u),style=line); segment(.60f,.61f,.85f,.86f) }
+            ApGlyphKind.BACK -> { segment(.65f,.18f,.34f,.50f); segment(.34f,.50f,.65f,.82f) }
+            ApGlyphKind.IMPORT -> { segment(.50f,.12f,.50f,.67f); segment(.28f,.47f,.50f,.69f); segment(.50f,.69f,.72f,.47f); segment(.19f,.84f,.81f,.84f) }
+            ApGlyphKind.OPEN -> { drawRoundRect(color,Offset(.13f*u,.29f*u),Size(.56f*u,.57f*u),CornerRadius(.08f*u),style=line); segment(.50f,.13f,.87f,.13f); segment(.87f,.13f,.87f,.50f); segment(.87f,.13f,.45f,.55f) }
+            ApGlyphKind.EDIT -> { segment(.23f,.70f,.66f,.27f); segment(.32f,.80f,.75f,.37f); segment(.23f,.70f,.19f,.84f); segment(.19f,.84f,.32f,.80f) }
+            ApGlyphKind.TRASH -> { drawRoundRect(color,Offset(.27f*u,.32f*u),Size(.46f*u,.53f*u),CornerRadius(.05f*u),style=line); segment(.19f,.23f,.81f,.23f); segment(.40f,.13f,.60f,.13f); segment(.42f,.44f,.42f,.71f); segment(.58f,.44f,.58f,.71f) }
+            ApGlyphKind.FOLDER -> { drawRoundRect(color,Offset(.13f*u,.35f*u),Size(.74f*u,.48f*u),CornerRadius(.07f*u),style=line); segment(.17f,.35f,.17f,.22f); segment(.17f,.22f,.43f,.22f); segment(.43f,.22f,.55f,.35f) }
+            ApGlyphKind.HOME -> { segment(.13f,.45f,.50f,.13f); segment(.50f,.13f,.87f,.45f); segment(.22f,.39f,.22f,.84f); segment(.78f,.39f,.78f,.84f); segment(.22f,.84f,.41f,.84f); segment(.41f,.84f,.41f,.62f); segment(.41f,.62f,.59f,.62f); segment(.59f,.62f,.59f,.84f); segment(.59f,.84f,.78f,.84f) }
+            ApGlyphKind.CALENDAR -> { drawRoundRect(color,Offset(.16f*u,.23f*u),Size(.68f*u,.66f*u),CornerRadius(.07f*u),style=line); segment(.16f,.43f,.84f,.43f); segment(.35f,.12f,.35f,.31f); segment(.65f,.12f,.65f,.31f); drawCircle(color,.045f*u,Offset(.39f*u,.63f*u)); drawCircle(color,.045f*u,Offset(.60f*u,.63f*u)) }
+            ApGlyphKind.USERS -> { drawCircle(color,.135f*u,Offset(.39f*u,.32f*u),style=line); drawCircle(color,.10f*u,Offset(.72f*u,.36f*u),style=line); segment(.13f,.82f,.13f,.69f); segment(.13f,.69f,.24f,.57f); segment(.24f,.57f,.54f,.57f); segment(.54f,.57f,.66f,.69f); segment(.66f,.69f,.66f,.82f); segment(.13f,.82f,.66f,.82f); segment(.70f,.57f,.84f,.63f); segment(.84f,.63f,.87f,.81f) }
+            ApGlyphKind.MORE -> { drawCircle(color,.07f*u,Offset(.22f*u,.50f*u)); drawCircle(color,.07f*u,Offset(.50f*u,.50f*u)); drawCircle(color,.07f*u,Offset(.78f*u,.50f*u)) }
+            ApGlyphKind.STAR -> { val p=listOf(.50f to .11f,.62f to .39f,.91f to .43f,.68f to .62f,.75f to .89f,.50f to .74f,.25f to .89f,.32f to .62f,.09f to .43f,.38f to .39f,.50f to .11f); p.zipWithNext().forEach{(a,b)->segment(a.first,a.second,b.first,b.second)} }
+            ApGlyphKind.RESTORE -> { segment(.31f,.20f,.13f,.38f); segment(.13f,.38f,.34f,.38f); segment(.13f,.38f,.13f,.18f); drawArc(color,-65f,305f,false,Offset(.19f*u,.19f*u),Size(.64f*u,.64f*u),style=line) }
+            ApGlyphKind.PLUS -> { segment(.50f,.16f,.50f,.84f); segment(.16f,.50f,.84f,.50f) }
+            ApGlyphKind.CHECK -> { segment(.18f,.53f,.42f,.75f); segment(.42f,.75f,.84f,.26f) }
+            ApGlyphKind.CLOCK -> { drawCircle(color,.34f*u,Offset(.50f*u,.50f*u),style=line); segment(.50f,.29f,.50f,.50f); segment(.50f,.50f,.68f,.61f) }
         }
     }
 }
 
-/** Tactile CTA: pressing visibly lowers the face over its solid 5dp strip. No shadow or animation. */
-@Composable
-fun ApRaisedButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    glyph: ApGlyphKind? = null,
-    secondary: Boolean = false,
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val base = if (secondary) ApPalette.Outline else ApColors.Pressed
-    val face = if (secondary) ApPalette.White else ApColors.Primary
-    val content = if (secondary) ApColors.Navy else ApColors.White
-    Box(
-        modifier.fillMaxWidth().height(60.dp)
-            .background(base, RoundedCornerShape(ApShapeToken.Card))
-            .padding(
-                top = if (pressed) ApSizeToken.ButtonDepth else 0.dp,
-                bottom = if (pressed) 0.dp else ApSizeToken.ButtonDepth,
-            ),
-    ) {
-        Button(
-            onClick = onClick,
-            interactionSource = interactionSource,
-            modifier = Modifier.fillMaxSize(),
-            shape = RoundedCornerShape(ApShapeToken.Medium),
-            border = if (secondary) BorderStroke(1.dp, ApPalette.Outline) else null,
-            colors = ButtonDefaults.buttonColors(containerColor = face, contentColor = content),
-            contentPadding = PaddingValues(horizontal = ApSpace.Base),
-        ) {
-            if (glyph != null) {
-                ApGlyph(glyph, modifier = Modifier.size(22.dp), color = content)
-                Spacer(Modifier.width(ApSpace.Sm))
-            }
-            Text(label, fontSize = 15.sp, fontWeight = FontWeight.Black, letterSpacing = .1.sp)
+@Composable fun ApRaisedButton(label:String,onClick:()->Unit,modifier:Modifier=Modifier,glyph:ApGlyphKind?=null,secondary:Boolean=false,enabled:Boolean=true) {
+    val interaction=remember{MutableInteractionSource()}; val pressed by interaction.collectIsPressedAsState(); val depth=if(pressed&&enabled)1.dp else 5.dp
+    val top=if(secondary)ApPalette.LightSurface else ApColors.Primary; val bottom=if(secondary)ApPalette.Outline else ApColors.Pressed
+    Box(modifier.fillMaxWidth().height(60.dp).background(if(enabled)bottom else ApPalette.Outline,RoundedCornerShape(19.dp)).padding(bottom=depth,top=5.dp-depth)) {
+        Button(onClick=onClick,enabled=enabled,interactionSource=interaction,modifier=Modifier.fillMaxSize().semantics{contentDescription=label},shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=top,contentColor=if(secondary)ApColors.Navy else ApColors.White,disabledContainerColor=ApPalette.Outline,disabledContentColor=ApColors.Navy),contentPadding=PaddingValues(horizontal=12.dp)) {
+            if(glyph!=null){ApGlyph(glyph,Modifier.size(22.dp),if(secondary)ApColors.Navy else ApColors.White);Spacer(Modifier.width(9.dp))}
+            Text(label,fontSize=15.sp,lineHeight=19.sp,fontWeight=FontWeight.ExtraBold,maxLines=2,overflow=TextOverflow.Ellipsis)
         }
     }
 }
 
-@Composable
-fun ApCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = ApColors.White,
-        shape = RoundedCornerShape(ApShapeToken.Card),
-        border = BorderStroke(1.dp, ApPalette.Outline),
-    ) { Column(Modifier.padding(ApSpace.Base), content = content) }
-}
+@Composable fun ApCard(modifier:Modifier=Modifier,content:@Composable ColumnScope.()->Unit){ Surface(modifier=modifier.fillMaxWidth(),color=ApColors.White,shape=RoundedCornerShape(20.dp),border=BorderStroke(1.dp,ApPalette.Outline)){Column(Modifier.padding(17.dp),content=content)} }
 
-/** Small icon surface used by rows/cards instead of emoji. */
-@Composable
-fun ApIconBadge(kind: ApGlyphKind, modifier: Modifier = Modifier, emphasized: Boolean = false) {
-    val background = if (emphasized) ApColors.Primary else ApPalette.LightSurface
-    val foreground = if (emphasized) ApColors.White else ApColors.Pressed
-    Surface(
-        modifier = modifier.size(52.dp),
-        color = background,
-        shape = RoundedCornerShape(ApShapeToken.Medium),
-        border = if (emphasized) null else BorderStroke(1.dp, ApPalette.Outline),
-    ) { Box(contentAlignment = Alignment.Center) { ApGlyph(kind, Modifier.size(29.dp), foreground) } }
-}
+/** Current eyebrow is a hero-card primitive; white is the safe default on primary blue. */
+@Composable fun ApEyebrow(label:String,modifier:Modifier=Modifier,onPrimary:Boolean=true){ Text(label.uppercase(),modifier=modifier,color=if(onPrimary)ApColors.White else ApColors.Pressed,fontWeight=FontWeight.Black,fontSize=11.sp,lineHeight=16.sp,letterSpacing=1.sp) }
 
-/** Convenience overload for the common call style `ApSegmentedControl(options, selected) { ... }`. */
-@Composable
-fun ApSegmentedControl(
-    options: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit,
-) = ApSegmentedControl(options, selected, Modifier, onSelect)
-
-/** Selected segment is exposed to TalkBack as selectable, not only through color. */
-@Composable
-fun ApSegmentedControl(
-    options: List<String>,
-    selected: String,
-    modifier: Modifier = Modifier,
-    onSelect: (String) -> Unit,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = ApPalette.White,
-        shape = RoundedCornerShape(ApShapeToken.Card),
-        border = BorderStroke(1.dp, ApPalette.Outline),
-    ) {
-        Row(Modifier.padding(5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            options.forEach { option ->
-                val active = option == selected
-                Surface(
-                    modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget)
-                        .selectable(selected = active, onClick = { onSelect(option) }),
-                    color = if (active) ApColors.Primary else ApPalette.White,
-                    shape = RoundedCornerShape(15.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(option, color = if (active) ApColors.White else ApColors.Navy,
-                            fontSize = 13.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ApEyebrow(label: String, modifier: Modifier = Modifier) {
-    Text(label.uppercase(), modifier = modifier, color = ApColors.Pressed,
-        fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
-}
+@Composable fun ApSectionHeading(title:String,description:String?=null,modifier:Modifier=Modifier){ Column(modifier.fillMaxWidth()){Text(title,color=ApColors.Navy,fontSize=21.sp,lineHeight=27.sp,fontWeight=FontWeight.Black);if(description!=null){Spacer(Modifier.height(4.dp));Text(description,color=ApColors.Navy,fontSize=14.sp,lineHeight=20.sp)}} }

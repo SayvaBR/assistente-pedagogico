@@ -14,7 +14,30 @@ class TeacherBackupCodecInstrumentedTest {
         profile = TeacherProfile("Docente Teste"),
         classrooms = listOf(Classroom(7, "Turma Sintética", "Ensino Fundamental", "Manhã")),
         students = listOf(Student(8, 7, "Aluno Sintético")),
-        lessons = listOf(Lesson(9, 7, "Frações", "Matemática", "2026-09-18", "08:00", "Compreender frações", "Metades", "Materiais concretos")),
+        lessons = listOf(Lesson(
+            id = 9,
+            classroomId = 7,
+            title = "Frações",
+            subject = "Matemática",
+            date = "2026-09-18",
+            time = "08:00",
+            objective = "Compreender frações",
+            content = "Metades",
+            method = "Materiais concretos",
+            archived = false,
+            durationMinutes = 70,
+            specificObjectives = "Comparar representações",
+            bnccCodes = "EF05MA03, EF05MA04",
+            justification = "Continuidade da aula anterior",
+            opening = "Retomar conhecimentos prévios",
+            openingMinutes = 10,
+            development = "Resolver situações com materiais concretos",
+            developmentMinutes = 45,
+            closing = "Sistematizar estratégias",
+            closingMinutes = 15,
+            assessment = "Registro das estratégias usadas",
+            adaptations = "Material ampliado e apoio visual",
+        )),
         attendance = listOf(Attendance(7, 8, "2026-09-18", "P")),
         observations = listOf(Observation(10, 7, 8, "Aprendizagem", "Registro exclusivamente sintético.", "2026-09-18", false)),
         appointments = listOf(Appointment(11, "Reunião sintética", "2026-09-19", "09:30")),
@@ -31,6 +54,26 @@ class TeacherBackupCodecInstrumentedTest {
         assertEquals("revoked", root.getJSONArray("files").getJSONObject(0).getString("accessState"))
         assertFalse(root.has("token"))
         assertFalse(root.has("secret"))
+    }
+
+    @Test fun backupPreservesEveryRichLessonV6FieldIncludingBncc() {
+        val lesson = TeacherBackupCodec.validate(TeacherBackupCodec.encode(snapshot()))
+            .getJSONArray("lessons").getJSONObject(0)
+
+        assertEquals(9L, lesson.getLong("id"))
+        assertEquals(7L, lesson.getLong("classroomId"))
+        assertEquals(70, lesson.getInt("durationMinutes"))
+        assertEquals("Comparar representações", lesson.getString("specificObjectives"))
+        assertEquals("EF05MA03, EF05MA04", lesson.getString("bnccCodes"))
+        assertEquals("Continuidade da aula anterior", lesson.getString("justification"))
+        assertEquals("Retomar conhecimentos prévios", lesson.getString("opening"))
+        assertEquals(10, lesson.getInt("openingMinutes"))
+        assertEquals("Resolver situações com materiais concretos", lesson.getString("development"))
+        assertEquals(45, lesson.getInt("developmentMinutes"))
+        assertEquals("Sistematizar estratégias", lesson.getString("closing"))
+        assertEquals(15, lesson.getInt("closingMinutes"))
+        assertEquals("Registro das estratégias usadas", lesson.getString("assessment"))
+        assertEquals("Material ampliado e apoio visual", lesson.getString("adaptations"))
     }
 
     @Test fun rejectsForeignOrFutureBackupBeforeRestoreCanTouchDatabase() {
