@@ -19,7 +19,7 @@ object TeacherBackupRestore {
         val profile: JSONObject?, val classrooms: List<JSONObject>, val students: List<JSONObject>,
         val lessons: List<JSONObject>, val attendance: List<JSONObject>, val observations: List<JSONObject>,
         val appointments: List<JSONObject>, val folders: List<JSONObject>, val files: List<JSONObject>,
-        val activities: List<JSONObject>,
+        val activities: List<JSONObject>, val layouts: List<JSONObject>, val templates: List<JSONObject>,
     ) {
         fun preview() = Preview(classrooms.size, students.size, lessons.size, attendance.size,
             observations.size, appointments.size, files.size, activities.size)
@@ -54,16 +54,20 @@ object TeacherBackupRestore {
             folders = root.getJSONArray("folders").rows(),
             files = root.getJSONArray("files").rows(),
             activities = root.getJSONArray("activities").rows(),
+            layouts = root.getJSONArray("lessonLayouts").rows(),
+            templates = root.getJSONArray("planTemplates").rows(),
         )
         result.profile?.required("name")
         val classes = result.classrooms.uniqueIds("Turmas")
         val students = result.students.uniqueIds("Alunos")
-        result.lessons.uniqueIds("Planos")
+        val lessons = result.lessons.uniqueIds("Planos")
         result.activities.uniqueIds("Atividades")
         result.observations.uniqueIds("Observações")
         result.appointments.uniqueIds("Compromissos")
         val folders = result.folders.uniqueIds("Pastas")
         result.files.uniqueIds("Arquivos")
+        result.templates.uniqueIds("Modelos")
+        result.layouts.uniqueIds("Estruturas de plano", "lessonId")
         require(result.folders.map { it.required("name").lowercase() }.distinct().size == result.folders.size) {
             "Há pastas com nomes repetidos."
         }
@@ -102,6 +106,16 @@ object TeacherBackupRestore {
             it.required("name")
             require(it.optionalId("folderId")?.let { id -> id in folders } != false) { "Arquivo sem pasta." }
         }
+        // Validate ALL nested compositions and references before the destructive transaction.
+        result.layouts.forEach { row ->
+            require(row.id("lessonId") in lessons) { "Estrutura vinculada a plano inexistente." }
+            PlanLayoutV9.decode(row.getJSONObject("layout").toString())
+        }
+        val names = mutableSetOf<String>()
+        result.templates.forEach { row ->
+            val template = PlanTemplate(row.required("name"), PlanLayoutV9.decode(row.getJSONObject("layout").toString()).blocks)
+            require(names.add(template.name.lowercase())) { "Modelos com nomes repetidos." }
+        }
         return result
     }
 
@@ -118,12 +132,12 @@ object TeacherBackupRestore {
     }
 
     fun restore(db: SQLiteDatabase, payload: String) {
-        require(db.version == LessonStatusV8.VERSION) { "Atualize o banco antes de restaurar." }
+        require(db.version == PlanLayoutV9.VERSION) { "Atualize o banco antes de restaurar." }
         // Validation must finish before the first DELETE; malformed input cannot touch current data.
         val records = parse(payload)
         db.beginTransaction()
         try {
-            listOf("lesson_activities", "attendance", "observations", "lessons", "students", "appointments", "saved_files",
+            listOf("lesson_layouts", "plan_templates", "lesson_activities", "attendance", "observations", "lessons", "students", "appointments", "saved_files",
                 "file_folders", "classrooms", "profile").forEach { db.delete(it, null, null) }
             records.profile?.let { db.insertOrThrow("profile", null, values("id" to 1, "name" to it.required("name"))) }
             records.classrooms.forEach { db.insertOrThrow("classrooms", null, values(
@@ -153,6 +167,12 @@ object TeacherBackupRestore {
                     "adaptations" to lesson.optional("adaptations"), "archived" to legacyArchived,
                     "pedagogical_status" to status.value, "status_before_archive" to previous.value))
             }
+            records.layouts.forEach { row -> db.insertOrThrow("lesson_layouts", null, values(
+                "lesson_id" to row.id("lessonId"),
+                "layout_json" to PlanLayoutV9.encode(PlanLayoutV9.decode(row.getJSONObject("layout").toString())))) }
+            records.templates.forEach { row -> db.insertOrThrow("plan_templates", null, values(
+                "id" to row.id(), "name" to row.required("name"),
+                "layout_json" to PlanLayoutV9.encode(PlanLayoutV9.decode(row.getJSONObject("layout").toString())))) }
             // Insert after classrooms and lessons: SQLite FKs and explicit class ownership are validated.
             records.activities.forEach { db.insertOrThrow("lesson_activities", null, values(
                 "id" to it.id(), "classroom_id" to it.id("classroomId"),
