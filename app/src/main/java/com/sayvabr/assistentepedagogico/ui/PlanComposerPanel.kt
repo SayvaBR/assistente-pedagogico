@@ -33,6 +33,8 @@ fun PlanComposerPanel(
     var templateName by rememberSaveable { mutableStateOf("") }
     var pendingTemplate by remember { mutableStateOf<Pair<Long, PlanTemplate>?>(null) }
     var pendingRemoval by remember { mutableStateOf<Long?>(null) }
+    var pendingRename by remember { mutableStateOf<PlanBlock?>(null) }
+    var renameTitle by rememberSaveable { mutableStateOf("") }
     val mandatory = setOf(PlanBlockKind.IDENTIFICATION, PlanBlockKind.OBJECTIVES,
         PlanBlockKind.CONTENT, PlanBlockKind.METHODOLOGY)
     val addable = PlanBlockKind.entries.filter { kind ->
@@ -90,10 +92,11 @@ fun PlanComposerPanel(
         ApCard {
             Text("Seção ${index + 1} de ${layout.blocks.size}", color = ApColors.Pressed,
                 fontWeight = FontWeight.Bold)
-            OutlinedTextField(block.title, { title ->
-                if (enabled && title.length <= 100 && title.trim().length >= 2) onChange(layout.update(block.copy(title = title)))
-            }, label = { Text("Título da seção") }, enabled = enabled,
-                singleLine = true, modifier = Modifier.fillMaxWidth())
+            Text(block.title, color = ApColors.Navy, fontWeight = FontWeight.Bold)
+            TextButton(onClick = {
+                renameTitle = block.title
+                pendingRename = block
+            }, enabled = enabled) { Text("Renomear seção") }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 TextButton(onClick = { onChange(layout.move(block.id, -1)) },
                     enabled = enabled && index > 0) { Text("Subir") }
@@ -113,6 +116,22 @@ fun PlanComposerPanel(
         }
     }
 
+    pendingRename?.let { selected ->
+        AlertDialog(onDismissRequest = { pendingRename = null },
+            title = { Text("Renomear seção") },
+            text = {
+                OutlinedTextField(renameTitle, { renameTitle = it.take(100) },
+                    label = { Text("Novo título da seção") },
+                    supportingText = { Text("Use de 2 a 100 caracteres. O nome atual só muda ao confirmar.") },
+                    isError = renameTitle.trim().length < 2,
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+            },
+            confirmButton = { TextButton(onClick = {
+                pendingRename = null
+                onChange(layout.update(selected.copy(title = renameTitle.trim())))
+            }, enabled = enabled && renameTitle.trim().length in 2..100) { Text("Salvar nome") } },
+            dismissButton = { TextButton(onClick = { pendingRename = null }) { Text("Cancelar") } })
+    }
     pendingTemplate?.let { selected ->
         AlertDialog(onDismissRequest = { pendingTemplate = null },
             title = { Text("Aplicar modelo ${selected.second.name}?") },
