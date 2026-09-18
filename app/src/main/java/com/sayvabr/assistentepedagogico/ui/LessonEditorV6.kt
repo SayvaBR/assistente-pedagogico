@@ -1,5 +1,6 @@
 package com.sayvabr.assistentepedagogico.ui
 
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.sayvabr.assistentepedagogico.data.BnccCatalog
 import com.sayvabr.assistentepedagogico.data.Classroom
 import com.sayvabr.assistentepedagogico.data.Lesson
+import com.sayvabr.assistentepedagogico.data.LessonPlanShare
 import com.sayvabr.assistentepedagogico.data.LessonPlanV6
 
 /** Professional offline lesson editor, including validated BNCC selection. */
@@ -58,6 +60,25 @@ fun LessonEditorV6(
     val allocatedMinutes = listOf(openingMinutes, developmentMinutes, closingMinutes)
         .sumOf { it.toLongOrNull() ?: 0L }
     val totalMinutes = duration.toLongOrNull() ?: 0L
+
+    /** Saving and sharing validate precisely the same current fields and BNCC selection. */
+    fun validatedEditorInput(): LessonPlanV6.Input {
+        val input = LessonPlanV6.Input(
+            title, subject, day, time, duration.toIntOrNull() ?: 0, objective, specific, content, bncc,
+            justification, method, opening, openingMinutes.toIntOrNull() ?: 0, development,
+            developmentMinutes.toIntOrNull() ?: 0, closing, closingMinutes.toIntOrNull() ?: 0,
+            assessment, adaptations,
+        )
+        val valid = LessonPlanV6.validated(input)
+        if (valid.bnccCodes.isNotBlank()) {
+            val verified = catalogue ?: BnccCatalog.load(context)
+            val unknown = verified.unknownCodes(valid.bnccCodes)
+            require(unknown.isEmpty()) {
+                "Códigos BNCC não encontrados: ${unknown.joinToString(", ")}. Selecione habilidades verificadas."
+            }
+        }
+        return valid
+    }
 
     fun update(old: String, next: String, setter: (String) -> Unit) {
         if (old != next) { setter(next); error = null; onDirty() }
@@ -149,22 +170,23 @@ fun LessonEditorV6(
             error?.let { Text(it, color = ApColors.Navy, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(10.dp))
             ApRaisedButton(if (initial == null) "Salvar plano de aula" else "Salvar alterações", onClick = {
-                val input = LessonPlanV6.Input(
-                    title, subject, day, time, duration.toIntOrNull() ?: 0, objective, specific, content, bncc,
-                    justification, method, opening, openingMinutes.toIntOrNull() ?: 0, development,
-                    developmentMinutes.toIntOrNull() ?: 0, closing, closingMinutes.toIntOrNull() ?: 0,
-                    assessment, adaptations,
-                )
-                runCatching {
-                    val valid = LessonPlanV6.validated(input)
-                    if (valid.bnccCodes.isNotBlank()) {
-                        val verified = catalogue ?: BnccCatalog.load(context)
-                        val unknown = verified.unknownCodes(valid.bnccCodes)
-                        require(unknown.isEmpty()) { "Códigos BNCC não encontrados: ${unknown.joinToString(", ")}. Selecione habilidades verificadas." }
-                    }
-                    save(valid)
-                }.onFailure { error = it.message ?: "Revise os campos do plano." }
+                runCatching { save(validatedEditorInput()) }
+                    .onFailure { error = it.message ?: "Revise os campos do plano." }
             }, glyph = ApGlyphKind.CHECK)
+            Spacer(Modifier.height(10.dp))
+            ApRaisedButton("Compartilhar prévia do plano", onClick = {
+                runCatching {
+                    val preview = LessonPlanShare.asPlainText(validatedEditorInput(), classroom.name)
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Plano de aula — ${title.trim()}")
+                        putExtra(Intent.EXTRA_TEXT, preview)
+                    }
+                    context.startActivity(Intent.createChooser(send, "Compartilhar prévia do plano"))
+                    error = null
+                }.onFailure { error = it.message ?: "Não foi possível compartilhar este plano." }
+            }, glyph = ApGlyphKind.DOCUMENT, secondary = true)
+            Text("A prévia contém os campos atuais. Compartilhar não salva alterações no aplicativo.", color = ApColors.Navy)
             if (archive != null) {
                 Spacer(Modifier.height(10.dp))
                 ApRaisedButton("Arquivar plano", onClick = { confirmArchive = true }, glyph = ApGlyphKind.FOLDER, secondary = true)
