@@ -50,7 +50,8 @@ object AppointmentV5 {
      */
     fun hasConflict(db: SQLiteDatabase, input: Input, excludingId: Long? = null): Boolean {
         val value = validated(input)
-        val args = mutableListOf(value.day, value.startTime, value.endTime)
+        // overlap iff existing.start < candidate.end && existing.end > candidate.start
+        val args = mutableListOf(value.day, value.endTime, value.startTime)
         val classroomClause = if (value.classroomId == null) {
             "1=1"
         } else {
