@@ -116,7 +116,7 @@ fun BnccPicker(
                     }
                 }
                 if (matches.size == 100) Text("Mostrando os primeiros 100 resultados. Refine a busca para encontrar outros.", style = MaterialTheme.typography.labelSmall)
-                Text("Fonte independente: ${catalog.attribution} · CC BY 4.0 · sem vínculo ou homologação pelo MEC. Confira as habilidades no documento oficial antes de usar.", style = MaterialTheme.typography.labelSmall)
+                Text("Fonte independente: ${catalog.attribution} · CC BY 4.0 · referência para planejar, sem vínculo ou homologação pelo MEC. Consulte os documentos oficiais quando precisar de conferência normativa.", style = MaterialTheme.typography.labelSmall)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("Cancelar") }
                     Spacer(Modifier.width(8.dp))
