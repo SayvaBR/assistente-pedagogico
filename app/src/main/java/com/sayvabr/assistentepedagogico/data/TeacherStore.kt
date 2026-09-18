@@ -219,7 +219,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             "duration_minutes" to value.durationMinutes, "objective" to value.objective, "specific_objectives" to value.specificObjectives,
             "content" to value.content, "bncc_codes" to value.bnccCodes, "justification" to value.justification, "method" to value.method,
             "opening" to value.opening, "opening_minutes" to value.openingMinutes, "development" to value.development,
-            "development_minutes" to value.developmentMinutes, "closing" to value.closing, "closing_minutes" to value.closingMinutes,
+            "development_minutes" to value.development, "development_minutes" to value.developmentMinutes, "closing" to value.closing, "closing_minutes" to value.closingMinutes,
             "assessment" to value.assessment, "adaptations" to value.adaptations))
         require(id > 0) { "Não foi possível salvar o plano de aula." }
         return id
@@ -301,7 +301,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     /** Permanently deletes only the selected observation. */
     fun deleteObservation(classroomId: Long, observationId: Long) {
-        val removed = writableDatabase.delete("observations", "id=? AND classroom_id=?", arrayOf(observationId.toString()))
+        val removed = writableDatabase.delete("observations", "id=? AND classroom_id=?", arrayOf(observationId.toString(), classroomId.toString()))
         require(removed == 1) { "Observação não encontrada nesta turma." }
     }
 
