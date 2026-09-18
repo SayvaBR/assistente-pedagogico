@@ -28,7 +28,9 @@ class TeacherBackupIntegrityInstrumentedTest {
             .put("subject", "Ciências").put("date", "2026-09-22").put("time", "08:00")
             .put("durationMinutes", 50).put("objective", "Investigar o assunto.")
             .put("content", "Experimento").put("method", "Observação")
-            .put("openingMinutes", 10).put("developmentMinutes", 30).put("closingMinutes", 10)))
+            .put("opening", "Apresentação do assunto").put("openingMinutes", 10)
+            .put("development", "Experimentar e registrar").put("developmentMinutes", 30)
+            .put("closing", "Síntese coletiva").put("closingMinutes", 10)))
         put("attendance", JSONArray().put(JSONObject().put("studentId", 7).put("classroomId", 1)
             .put("date", "2026-09-22").put("status", "P")))
         put("observations", JSONArray().put(JSONObject().put("id", 8).put("studentId", 7)
@@ -72,6 +74,48 @@ class TeacherBackupIntegrityInstrumentedTest {
             TeacherBackupRestore.preview(root.toString())
         }
         assertTrue(error.message.orEmpty().contains("momentos"))
+    }
+
+    @Test fun rejectsLessonDescriptionWithoutMinutes() {
+        val root = validBackup()
+        root.getJSONArray("lessons").getJSONObject(0).put("openingMinutes", 0)
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            TeacherBackupRestore.preview(root.toString())
+        }
+        assertTrue(error.message.orEmpty().contains("abertura"))
+    }
+
+    @Test fun rejectsLessonMinutesWithoutDescription() {
+        val root = validBackup()
+        root.getJSONArray("lessons").getJSONObject(0).put("development", "")
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            TeacherBackupRestore.preview(root.toString())
+        }
+        assertTrue(error.message.orEmpty().contains("desenvolvimento"))
+    }
+
+    @Test fun rejectsRichLessonThatWouldFinishOnNextDay() {
+        val root = validBackup()
+        root.getJSONArray("lessons").getJSONObject(0).put("time", "23:30")
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            TeacherBackupRestore.preview(root.toString())
+        }
+        assertTrue(error.message.orEmpty().contains("fim do dia"))
+    }
+
+    @Test fun acceptsLegacyLessonWithoutRichDurationAndMoments() {
+        val root = validBackup()
+        root.getJSONArray("lessons").getJSONObject(0).apply {
+            remove("durationMinutes")
+            remove("opening")
+            remove("openingMinutes")
+            remove("development")
+            remove("developmentMinutes")
+            remove("closing")
+            remove("closingMinutes")
+            put("time", "23:30")
+        }
+        assertEquals(1, TeacherBackupRestore.preview(root.toString()).lessons)
     }
 
     @Test fun rejectsAppointmentEndingBeforeItsStart() {
