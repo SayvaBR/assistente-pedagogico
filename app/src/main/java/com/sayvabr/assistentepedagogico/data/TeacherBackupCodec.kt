@@ -3,16 +3,17 @@ package com.sayvabr.assistentepedagogico.data
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Versioned, local-only backup payload. This codec does not perform I/O or upload data.
- * The caller is responsible for choosing a SAF destination and for explicit restore confirmation.
- */
+/** Versioned local-only JSON codec. Export via TeacherStore to preserve archival origins. */
 object TeacherBackupCodec {
     const val FORMAT = "assistente-pedagogico-backup"
-    // Optional fields maintain backward compatibility with backup envelope v1.
+    // Optional keys extend the original v1 envelope without breaking legacy imports.
     const val VERSION = 1
 
-    fun encode(snapshot: TeacherSnapshot, activities: List<LessonActivityV7.Activity> = emptyList()): String = JSONObject().apply {
+    fun encode(
+        snapshot: TeacherSnapshot,
+        activities: List<LessonActivityV7.Activity> = emptyList(),
+        archiveOrigins: Map<Long, LessonStatus> = emptyMap(),
+    ): String = JSONObject().apply {
         put("format", FORMAT)
         put("version", VERSION)
         put("profile", snapshot.profile?.let { JSONObject().put("name", it.name) } ?: JSONObject.NULL)
@@ -32,7 +33,7 @@ object TeacherBackupCodec {
             put("closing", l.closing); put("closingMinutes", l.closingMinutes)
             put("assessment", l.assessment); put("adaptations", l.adaptations); put("archived", l.archived)
             put("pedagogicalStatus", l.status.value)
-            put("statusBeforeArchive", if (l.archived) l.statusBeforeArchive.value else l.status.value)
+            put("statusBeforeArchive", if (l.archived) archiveOrigins[l.id]?.value ?: LessonStatus.DRAFT.value else l.status.value)
         }) } })
         put("activities", JSONArray().apply { activities.forEach { activity -> put(JSONObject().apply {
             put("id", activity.id); put("classroomId", activity.classroomId)
@@ -49,11 +50,10 @@ object TeacherBackupCodec {
         }) } })
         put("appointments", JSONArray().apply { snapshot.appointments.forEach { a -> put(JSONObject().apply {
             put("id", a.id); put("title", a.title); put("date", a.date); put("time", a.time)
-            // Preserve v5 attributes. Legacy entries keep endTime == time (unknown duration).
             put("endTime", a.endTime); put("type", a.type)
             put("classroomId", a.classroomId ?: JSONObject.NULL)
         }) } })
-        // SAF grants are device/provider capabilities, not portable backup data.
+        // SAF grants cannot be backed up. Restore always requires reauthorization.
         put("files", JSONArray().apply { snapshot.files.forEach { f -> put(JSONObject().apply {
             put("id", f.id); put("name", f.name); put("uri", f.uri); put("folderId", f.folderId ?: JSONObject.NULL)
             put("favorite", f.favorite); put("trashedAt", f.trashedAt ?: JSONObject.NULL); put("accessState", "revoked")
@@ -63,7 +63,7 @@ object TeacherBackupCodec {
         }) } })
     }.toString()
 
-    /** Validates the envelope and record ownership before preview or restore can touch SQLite. */
+    /** Validate envelope and ownership before preview or restore can touch SQLite. */
     fun validate(payload: String): JSONObject {
         require(payload.toByteArray(Charsets.UTF_8).size <= 10 * 1024 * 1024) { "Backup excede o limite de 10 MB." }
         val root = runCatching { JSONObject(payload) }.getOrElse { throw IllegalArgumentException("Backup inválido.", it) }
