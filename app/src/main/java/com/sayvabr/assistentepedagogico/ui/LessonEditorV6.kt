@@ -60,6 +60,12 @@ fun LessonEditorV6(
     var showBnccPicker by rememberSaveable { mutableStateOf(false) }
     var catalogue by remember { mutableStateOf<BnccCatalog?>(null) }
 
+    // TeacherApp's transient discard flag is reset when an Activity is recreated. Preserve the
+    // editor flag and re-arm navigation protection after all saveable fields are restored.
+    LaunchedEffect(fieldsDirty) {
+        if (fieldsDirty) onDirty()
+    }
+
     val predictedEnd = remember(time, duration) {
         runCatching { LessonPlanV6.endTime(time, duration.toIntOrNull() ?: 0) }.getOrNull()
     }
