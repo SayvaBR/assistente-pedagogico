@@ -1,0 +1,31 @@
+name: One-time BNCC offline snapshot import
+on:
+  push:
+    branches:
+      - feat/14-navigation-visual-integration
+    paths:
+      - .github/workflows/vendor-bncc-once.yml
+permissions:
+  contents: write
+jobs:
+  vendor:
+    if: github.repository == 'SayvaBR/assistente-pedagogico'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          persist-credentials: true
+      - name: Check importer using synthetic fixtures
+        run: python3 -m unittest discover -s tools/tests -p test_vendor_bncc.py
+      - name: Download and verify every pinned upstream BNCC blob
+        run: python3 tools/vendor_bncc.py
+      - name: Commit snapshot and permanently remove this temporary write workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/assets/bncc/catalog.json
+          git rm .github/workflows/vendor-bncc-once.yml
+          git commit -m 'data(bncc): vendor verified offline catalogue and remove one-time workflow'
+          git push origin HEAD:refs/heads/feat/14-navigation-visual-integration
