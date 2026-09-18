@@ -24,7 +24,6 @@ import com.sayvabr.assistentepedagogico.data.restoreBackupAfterConfirmation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.time.LocalDate
 
 /** SAF flows use the Activity-owned database. Never upload backups or copy external PDF bytes. */
@@ -44,11 +43,7 @@ fun PlanningBackupPanel() {
             feedback = null
             try {
                 withContext(Dispatchers.IO) {
-                    val bytes = store.exportBackupPayload().toByteArray(Charsets.UTF_8)
-                    require(bytes.size <= 10 * 1024 * 1024) { "Backup excede o limite de 10 MB." }
-                    val stream = context.contentResolver.openOutputStream(uri, "wt")
-                        ?: error("Não foi possível abrir o destino selecionado.")
-                    stream.use { it.write(bytes); it.flush() }
+                    PlanningBackupDocumentIo.write(context.contentResolver, uri, store.exportBackupPayload())
                 }
                 feedback = "Backup exportado no documento escolhido. Guarde-o em um local seguro."
             } catch (e: Exception) {
@@ -64,21 +59,7 @@ fun PlanningBackupPanel() {
             preview = null
             try {
                 val (payload, summary) = withContext(Dispatchers.IO) {
-                    val stream = context.contentResolver.openInputStream(uri)
-                        ?: error("Não foi possível ler o documento selecionado.")
-                    val buffer = ByteArray(8192)
-                    val contents = ByteArrayOutputStream()
-                    stream.use { input ->
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            require(contents.size() + count <= 10 * 1024 * 1024) {
-                                "Backup excede o limite de 10 MB."
-                            }
-                            contents.write(buffer, 0, count)
-                        }
-                    }
-                    val text = contents.toString(Charsets.UTF_8.name())
+                    val text = PlanningBackupDocumentIo.read(context.contentResolver, uri)
                     text to TeacherBackupRestore.preview(text)
                 }
                 pendingPayload = payload
