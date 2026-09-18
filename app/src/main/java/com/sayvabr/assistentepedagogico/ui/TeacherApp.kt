@@ -195,7 +195,10 @@ fun TeacherApp(store: TeacherStore) {
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = ApSpace.Base)) {
                 Spacer(Modifier.height(18.dp))
                 when (screen) {
-                    "home" -> HomeScreen(snapshot, currentClass, { requestNavigate(it) }, { selectedClass = it })
+                    "home" -> HomeScreen(snapshot, currentClass, { destination ->
+                        if (destination in setOf("attendance", "newLesson", "planning", "agenda")) selectedDay = today()
+                        requestNavigate(destination)
+                    }, { selectedClass = it })
                     "classes" -> ClassesScreen(snapshot, currentClass,
                         onPick = { selectedClass = it; requestNavigate("classDetail") },
                         onAdd = { requestNavigate("createClass") },
@@ -521,11 +524,27 @@ fun TeacherApp(store: TeacherStore) {
         Spacer(Modifier.height(12.dp)); PrimaryButton("Gerenciar turmas") { go("classes") }; return
     }
     val activeClasses = data.classrooms.filterNot { it.archived }
+    val homeDay = today()
+    val overview = HomeContentPolicy.forClass(data, classroom, homeDay)
     if (activeClasses.size > 1) {
         Text("Turma em foco", color = ink, fontWeight = FontWeight.Bold)
-        Choices(activeClasses.map { it.name }, classroom.name) { label -> activeClasses.firstOrNull { it.name == label }?.let { select(it.id) } }
+        Spacer(Modifier.height(8.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            activeClasses.forEach { option ->
+                val chosen = option.id == classroom.id
+                val sameNameAndShift = activeClasses.count { it.name == option.name && it.shift == option.shift } > 1
+                val label = "${option.name} · ${option.shift}" + if (sameNameAndShift) " · turma ${option.id}" else ""
+                OutlinedButton(
+                    onClick = { select(option.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(ApShapeToken.Medium),
+                    border = BorderStroke(1.dp, if (chosen) blue else outline),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = if (chosen) blue else Color.White),
+                ) { Text(label, color = if (chosen) Color.White else ink, fontWeight = FontWeight.ExtraBold) }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
     }
-    val todayLesson = data.lessons.firstOrNull { it.date == today() && it.classroomId == classroom.id }
+    val todayLesson = overview.lesson
     Surface(shape = RoundedCornerShape(ApShapeToken.Hero), color = blue, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(21.dp)) {
             ApEyebrow("Aula em foco", Modifier)
@@ -539,19 +558,23 @@ fun TeacherApp(store: TeacherStore) {
     }
     Spacer(Modifier.height(20.dp))
     Subtitle("Para resolver agora")
-    ActionTile(ApGlyphKind.USERS, "Fazer chamada", "${classroom.name} • ${friendlyDay(today())}") { go("attendance") }
+    ActionTile(ApGlyphKind.USERS, "Fazer chamada", "${classroom.name} • ${overview.attendanceMarked}/${overview.studentCount} registros hoje") { go("attendance") }
     ActionTile(ApGlyphKind.DOCUMENT, "Registrar observação", "Guarde o contexto da aula") { go("observation") }
     ActionTile(ApGlyphKind.CALENDAR, "Planejar aula", "Organize seu dia") { go("planning") }
     ActionTile(ApGlyphKind.CALENDAR, "Ver compromissos", "Agenda do dia") { go("agenda") }
     Spacer(Modifier.height(15.dp))
     Subtitle("Sua agenda de hoje")
-    val events = data.appointments.filter { it.date == today() }
+    val events = data.appointments.filter { it.date == homeDay }
     if (events.isEmpty()) Panel { Text("Nenhum compromisso cadastrado para hoje.", color = ink) }
     events.forEach { item -> ActionTile(ApGlyphKind.CALENDAR, item.title, item.time) { go("agenda") } }
     Spacer(Modifier.height(12.dp))
     Subtitle("Atividade recente")
-    data.observations.take(3).forEach { note -> ActionTile(ApGlyphKind.DOCUMENT, note.kind, note.body.take(75)) { go("classDetail") } }
-    if (data.observations.isEmpty()) Panel { Text("Os registros que você criar aparecerão aqui.", color = ink) }
+    overview.recentObservations.forEach { note ->
+        ActionTile(ApGlyphKind.DOCUMENT, note.kind, note.body.take(75)) { go("observationHistory") }
+    }
+    if (overview.recentObservations.isEmpty()) Panel {
+        Text("Nenhum registro nesta turma. Suas observações de outras turmas permanecem separadas.", color = ink)
+    }
 }
 
 @Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit, onRestore: (Long) -> Unit) {
