@@ -155,7 +155,6 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     fun updateClass(classroomId: Long, name: String, stage: String, shift: String) {
         require(name.trim().isNotEmpty()) { "Informe o nome da turma." }
-        require(stage in listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")) { "Selecione a etapa de ensino." }
         val changed = writableDatabase.update("classrooms", values("name" to name.trim(), "stage" to stage, "shift" to shift), "id=? AND archived=0", arrayOf(classroomId.toString()))
         require(changed == 1) { "Turma não encontrada ou arquivada." }
     }
@@ -212,6 +211,8 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun saveLesson(input: LessonPlanV6.Input, classroomId: Long): Long {
+        // Existing TeacherApp callback remains unchanged; composition travels with the input.
+        input.composition?.let { return createComposedLesson(classroomId, input.copy(composition = null), it) }
         val value = LessonPlanV6.validated(input)
         val id = writableDatabase.insertOrThrow("lessons", null, values(
             "classroom_id" to classroomId, "title" to value.title, "subject" to value.subject, "day" to value.day, "time" to value.time,
@@ -228,6 +229,10 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     fun updateLesson(classroomId: Long, lessonId: Long, input: LessonPlanV6.Input) {
         input.statusTransition?.let { target ->
             LessonStatusV8.transition(writableDatabase, classroomId, lessonId, target)
+            return
+        }
+        input.composition?.let {
+            updateComposedLesson(classroomId, lessonId, input.copy(composition = null), it)
             return
         }
         val value = LessonPlanV6.validated(input)
@@ -296,7 +301,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     /** Permanently deletes only the selected observation. */
     fun deleteObservation(classroomId: Long, observationId: Long) {
-        val removed = writableDatabase.delete("observations", "id=? AND classroom_id=?", arrayOf(observationId.toString(), classroomId.toString()))
+        val removed = writableDatabase.delete("observations", "id=? AND classroom_id=?", arrayOf(observationId.toString()))
         require(removed == 1) { "Observação não encontrada nesta turma." }
     }
 
