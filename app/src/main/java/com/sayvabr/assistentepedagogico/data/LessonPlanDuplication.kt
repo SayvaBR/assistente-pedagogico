@@ -5,11 +5,11 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import java.time.LocalDate
 
-/** A copy is an independent lesson with independent activity records, never a second reference to the original. */
+/** A copy is an independent lesson with independent activity records and personalized layout. */
 object LessonPlanDuplication {
     /**
      * Copy a non-archived lesson belonging to an active classroom, preserving all pedagogical fields.
-     * Activities linked to the original are copied and relinked to the new lesson in the same transaction.
+     * Activities and the immutable snapshot layout are copied in the same transaction.
      * A different date may be selected, but the original lesson and activities remain unchanged.
      * A copy is always a draft: completion/readiness belongs to the original teaching event.
      */
@@ -51,6 +51,12 @@ object LessonPlanDuplication {
                    SELECT classroom_id,?,title,instructions,duration_minutes FROM lesson_activities
                    WHERE classroom_id=? AND lesson_id=?""".trimIndent(),
                 arrayOf(newId, classroomId, lessonId),
+            )
+            // Copy by VALUE, never link a lesson to a mutable template or source row.
+            db.execSQL(
+                """INSERT INTO lesson_layouts (lesson_id,layout_json)
+                   SELECT ?,layout_json FROM lesson_layouts WHERE lesson_id=?""".trimIndent(),
+                arrayOf(newId, lessonId),
             )
             db.setTransactionSuccessful()
             newId
