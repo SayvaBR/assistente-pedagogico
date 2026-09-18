@@ -149,7 +149,8 @@ fun PlanningWorkspace(
     val focus = LocalDate.parse(day)
     val ownLessons = data.lessons.filter { it.classroomId == classroom?.id && !it.archived }
     val lessonDays = ownLessons.map { it.date }.toSet()
-    val appointmentDays = data.appointments.map { it.date }.toSet()
+    val relevantAppointments = data.appointments.filter { it.classroomId == null || it.classroomId == classroom?.id }
+    val appointmentDays = relevantAppointments.map { it.date }.toSet()
     ApSectionHeading("Planejamento", classroom?.let { "${it.name} · aulas reais do seu calendário" } ?: "Organize suas turmas e aulas")
     Spacer(Modifier.height(12.dp))
     ApSegmentedControl(listOf("Dia", "Semana", "Mês", "Arquivados"), mode) { mode = it }
@@ -166,13 +167,16 @@ fun PlanningWorkspace(
     val visible = data.lessons.filter { lesson ->
         lesson.classroomId == classroom?.id && when (mode) {
             "Arquivados" -> lesson.archived
-            "Semana" -> !lesson.archived && PlanningCalendarPolicy.matchesWeek(lesson.date, focus)
-            else -> !lesson.archived && PlanningCalendarPolicy.matchesDay(lesson.date, focus)
+            else -> !lesson.archived && PlanningCalendarPolicy.inPeriod(lesson.date, focus, mode)
         }
     }.sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
+    val shownAppointments = if (mode == "Arquivados") emptyList() else relevantAppointments
+        .filter { PlanningCalendarPolicy.inPeriod(it.date, focus, mode) }
+        .sortedWith(compareBy<Appointment> { it.date }.thenBy { it.time })
     val caption = when (mode) {
         "Arquivados" -> "Planos arquivados"
         "Semana" -> "Aulas desta semana"
+        "Mês" -> "Aulas de ${capitalized(focus.format(monthLabel))}"
         else -> "${capitalized(focus.format(completeDayLabel))} · aulas"
     }
     Text("$caption (${visible.size})", color = ApColors.Navy, fontSize = 19.sp, fontWeight = FontWeight.Black)
@@ -200,12 +204,25 @@ fun PlanningWorkspace(
         }
     }
     if (mode != "Arquivados") {
+        Spacer(Modifier.height(15.dp))
+        Text("Compromissos do período (${shownAppointments.size})", color = ApColors.Navy, fontSize = 19.sp, fontWeight = FontWeight.Black)
+        if (shownAppointments.isEmpty()) {
+            Spacer(Modifier.height(9.dp))
+            ApCard { Text("Nenhum compromisso cadastrado para este período.", color = ApColors.Navy) }
+        }
+        shownAppointments.forEach { appointment ->
+            Spacer(Modifier.height(9.dp))
+            ApCard {
+                Text("${appointment.date} · ${appointment.time}–${appointment.endTime} · ${appointment.type}",
+                    color = ApColors.Pressed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(appointment.title, color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                ApRaisedButton("Abrir agenda", onClick = { onDay(appointment.date); go("agenda") }, secondary = true)
+            }
+        }
         Spacer(Modifier.height(14.dp))
         ApRaisedButton("Adicionar aula", onClick = { go("newLesson") }, glyph = ApGlyphKind.PLUS)
         Spacer(Modifier.height(9.dp))
         ApRaisedButton("Ver compromissos", onClick = { go("agenda") }, glyph = ApGlyphKind.CALENDAR, secondary = true)
-        val appointments = data.appointments.count { PlanningCalendarPolicy.matchesDay(it.date, focus) }
-        if (appointments > 0) Text("$appointments compromisso(s) na data selecionada.", color = ApColors.Navy, fontSize = 12.sp)
     }
 }
 
@@ -234,10 +251,7 @@ fun PlanningAgendaScreen(
         "Semana" -> WeekStrip(focus, lessonDays, appointmentDays, onDay)
     }
     Spacer(Modifier.height(15.dp))
-    val inPeriod: (String) -> Boolean = { iso ->
-        if (mode == "Semana") PlanningCalendarPolicy.matchesWeek(iso, focus)
-        else PlanningCalendarPolicy.matchesDay(iso, focus)
-    }
+    val inPeriod: (String) -> Boolean = { iso -> PlanningCalendarPolicy.inPeriod(iso, focus, mode) }
     val entries = buildList {
         data.appointments.filter { inPeriod(it.date) }.forEach { appointment: Appointment ->
             val room = appointment.classroomId?.let { id -> data.classrooms.firstOrNull { it.id == id }?.name ?: "Turma indisponível" } ?: "Geral"
@@ -249,11 +263,15 @@ fun PlanningAgendaScreen(
             add(AgendaEntry(lesson.date, lesson.time, lesson.title, "Aula · $classroomName · ${lesson.subject}", lessonId = lesson.id))
         }
     }.sortedWith(compareBy<AgendaEntry> { it.day }.thenBy { it.time }.thenBy { it.title })
-    Text("${if (mode == "Semana") "Agenda da semana" else capitalized(focus.format(completeDayLabel))} (${entries.size})",
-        color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 19.sp)
+    val periodTitle = when (mode) {
+        "Mês" -> "Agenda de ${capitalized(focus.format(monthLabel))}"
+        "Semana" -> "Agenda da semana"
+        else -> capitalized(focus.format(completeDayLabel))
+    }
+    Text("$periodTitle (${entries.size})", color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 19.sp)
     if (entries.isEmpty()) {
         Spacer(Modifier.height(10.dp))
-        ApCard { Text("Nenhum compromisso ou aula nesta data ou semana.", color = ApColors.Navy) }
+        ApCard { Text("Nenhum compromisso ou aula neste período.", color = ApColors.Navy) }
     }
     entries.forEach { entry ->
         Spacer(Modifier.height(9.dp))
