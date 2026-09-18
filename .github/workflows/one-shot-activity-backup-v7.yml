@@ -1,0 +1,32 @@
+name: One-shot v7 activity backup repair
+on:
+  push:
+    branches:
+      - feat/14-navigation-visual-integration
+    paths:
+      - .github/workflows/one-shot-activity-backup-v7.yml
+permissions:
+  contents: write
+jobs:
+  apply-once:
+    if: github.repository == 'SayvaBR/assistente-pedagogico' && github.ref == 'refs/heads/feat/14-navigation-visual-integration'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Check exact branch HEAD, repair v7 backups and clean temporary permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo 'Branch changed; abort without overwriting'; exit 1; }
+          python3 tools/_once_activity_backup_v7.py
+          rm tools/_once_activity_backup_v7.py .github/workflows/one-shot-activity-backup-v7.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git diff --cached --check
+          git commit -m 'fix(planning): preserve v7 activities on backup and restore atomically'
+          git push origin HEAD:feat/14-navigation-visual-integration
