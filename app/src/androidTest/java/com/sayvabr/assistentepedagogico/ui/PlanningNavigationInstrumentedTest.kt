@@ -61,7 +61,9 @@ class PlanningNavigationInstrumentedTest {
         openPlanning()
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
         compose.onNodeWithText("Novo plano de aula").assertExists()
-        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Plano totalmente fictício")
+        // Composer input 0 now names a reusable template, input 1 labels the first section.
+        // Input 2 edits the canonical lesson title and must trigger discard protection.
+        compose.onAllNodes(hasSetTextAction())[2].performTextInput("Plano totalmente fictício")
         compose.onNodeWithText("Voltar").performClick()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
@@ -88,7 +90,7 @@ class PlanningNavigationInstrumentedTest {
         val restoration = StateRestorationTester(compose)
         openPlanning(restoration)
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
-        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Rascunho após rotação")
+        compose.onAllNodes(hasSetTextAction())[2].performTextInput("Rascunho após rotação")
         restoration.emulateSavedInstanceStateRestore()
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Rascunho após rotação").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Voltar").performClick()
