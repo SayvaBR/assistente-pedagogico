@@ -1,0 +1,38 @@
+name: One-shot Planning integration (self-cleaning)
+on:
+  push:
+    branches: [feat/14-navigation-visual-integration]
+    paths:
+      - .github/workflows/one-shot-planning-integration.yml
+permissions:
+  contents: write
+concurrency:
+  group: one-shot-planning-integration
+  cancel-in-progress: false
+jobs:
+  integrate:
+    if: github.repository == 'SayvaBR/assistente-pedagogico' && github.ref == 'refs/heads/feat/14-navigation-visual-integration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          persist-credentials: true
+      - name: Confirm exact files, apply scoped integration, remove automation and push without force
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          app=app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          workspace=app/src/main/java/com/sayvabr/assistentepedagogico/ui/PlanningWorkspace.kt
+          test "$(git hash-object "$app")" = '4ec33671b6aa0d932ec96b65e53cd1c55cdb941b'
+          test "$(git hash-object "$workspace")" = '000b3f6346b1e0d711283a8107068c4d709c688d'
+          python3 tools/one_shot_planning_integration.py
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$app" "$workspace"
+          git rm tools/one_shot_planning_integration.py .github/workflows/one-shot-planning-integration.yml
+          git commit -m 'feat(planning): connect month/week/day screens to existing lesson and appointment CRUD'
+          git push origin HEAD:refs/heads/feat/14-navigation-visual-integration
