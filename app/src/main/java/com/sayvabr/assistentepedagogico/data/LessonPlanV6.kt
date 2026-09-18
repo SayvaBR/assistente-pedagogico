@@ -29,6 +29,8 @@ object LessonPlanV6 {
         val closingMinutes: Int = 0,
         val assessment: String = "",
         val adaptations: String = "",
+        /** UI command routed by the Activity's existing save/commit callback; never stored as lesson content. */
+        val statusTransition: LessonStatus? = null,
     )
 
     /** The editor and persistence validation share the same calculation. No silent midnight wrap. */
@@ -44,6 +46,7 @@ object LessonPlanV6 {
     }
 
     fun validated(input: Input): Input {
+        require(input.statusTransition == null) { "Transições de estado devem usar a operação específica do plano existente." }
         val title = input.title.trim()
         val subject = input.subject.trim()
         val objective = input.objective.trim()
