@@ -298,11 +298,7 @@ fun TeacherApp(store: TeacherStore) {
                             try { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(file.uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
                             catch (e: Exception) { error = "Não foi possível abrir este arquivo. Verifique se ele ainda existe e se há um aplicativo compatível." }
                         },
-                        renameFile = { file, newName -> commit("files") { store.renameFile(file.id, newName) } },
-                        removeFile = { file -> commit("files") {
-                            store.removeFile(file.id)
-                            runCatching { context.contentResolver.releasePersistableUriPermission(android.net.Uri.parse(file.uri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-                        } })
+                        renameFile = { file, newName -> commit("files") { store.renameFile(file.id, newName) } })
                     "more" -> MoreScreen(snapshot, { requestNavigate(it) })
                     "profile" -> ProfileForm(snapshot.profile.name, { requestBack() },
                         { name -> commit("more") { store.saveProfile(name) } }, onDirty = { formDirty = true })

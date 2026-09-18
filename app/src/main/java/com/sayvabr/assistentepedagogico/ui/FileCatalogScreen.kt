@@ -32,7 +32,6 @@ fun FileCatalogScreen(
     importFile: () -> Unit,
     openFile: (SavedFile) -> Unit,
     renameFile: (SavedFile, String) -> Unit,
-    @Suppress("UNUSED_PARAMETER") removeFile: (SavedFile) -> Unit,
 ) {
     val context = LocalContext.current
     val store = LocalTeacherStore.current
