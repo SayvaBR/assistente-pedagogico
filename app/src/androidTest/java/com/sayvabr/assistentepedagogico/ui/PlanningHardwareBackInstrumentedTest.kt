@@ -56,9 +56,9 @@ class PlanningHardwareBackInstrumentedTest {
     @Test fun activityBackFromDirtyLessonRequiresDiscardAndKeepsRecordUnsaved() {
         compose.onAllNodesWithText("Planejamento").onLast().performClick()
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
-        // The composer puts the independent template-name field before the lesson fields.
-        // Select the actual lesson title: input 0 is template name, 1 is section title, 2 is lesson title.
-        compose.onAllNodes(hasSetTextAction())[2].performTextInput("Rascunho físico sintético")
+        // The first editable field names a template; section titles use a separate dialog.
+        // The second editable field is the actual lesson title.
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Rascunho físico sintético")
         dispatchBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
