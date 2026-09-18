@@ -1,39 +1,30 @@
-# Planejamento — auditoria de conteúdo BNCC (18/09/2026)
+# Planejamento — fonte e integridade do catálogo BNCC (18/09/2026)
 
-## Estado: NÃO HOMOLOGADO (2 entradas amostradas, não 1.721)
+## Decisão de produto: referência pedagógica, sem auditoria editorial exaustiva como bloqueio
 
-Este registro separa a checagem técnica do catálogo da **conferência editorial de cada habilidade**. O arquivo offline `app/src/main/assets/bncc/catalog.json` informa versão `dados-2026.07.1`, revisão `daabd7dd63ae0cac0aa520b6189e79f95c24f583`, licença CC BY 4.0 e atribuição `bncc.dev (mantido pela Profy)`. Declara 1.721 entradas, incluindo 141 de Computação. Os testes Android checam contagens, códigos únicos, preenchimento e busca; isso NÃO equivale a 1.721 transcrições conferidas.
+A titular definiu em 18/09/2026 que as habilidades BNCC servem como **norteador do planejamento** e que podemos confiar na fonte de dados adotada para essa finalidade. Portanto, conferir individualmente as 1.719 habilidades restantes **não é critério de conclusão do Planejamento nem bloqueio de lançamento**. A auditoria editorial pode ser feita futuramente, sem comprometer os testes funcionais.
 
-## Referências oficiais a preservar por versão
+O aplicativo usa atualmente um **snapshot offline de fonte independente**, e não uma API consultada em tempo real. O arquivo `app/src/main/assets/bncc/catalog.json` informa versão `dados-2026.07.1`, revisão `daabd7dd63ae0cac0aa520b6189e79f95c24f583`, licença CC BY 4.0 e atribuição `bncc.dev (mantido pela Profy)`. Declara 1.721 entradas, incluindo 141 de Computação. Contagens, formato, unicidade de códigos e busca são testados; essas verificações técnicas não demonstram conferência editorial de cada texto.
 
-- BNCC Educação Infantil e Ensino Fundamental, PDF no domínio oficial da Base: https://basenacionalcomum.mec.gov.br/images/BNCC_EI_EF_110518_versaofinal_site.pdf
-- BNCC Educação Básica/Ensino Médio, PDF hospedado pelo MEC: https://www.gov.br/mec/pt-br/cne/bncc_ensino_medio.pdf
-- Complemento de Computação, anexo ao Parecer CNE/CEB nº 2/2022, PDF oficial: https://basenacionalcomum.mec.gov.br/images/historico/anexo_parecer_cneceb_n_2_2022_bncc_computacao.pdf
-- Resolução CNE/CEB nº 1/2022: https://portal.mec.gov.br/docman/outubro-2022-pdf/241671-rceb001-22/file
-- Portal oficial: https://basenacionalcomum.mec.gov.br/ ; fonte **secundária** utilizada no catálogo: https://github.com/bncc-dev/bncc-dados.
+## Requisitos funcionais que permanecem
 
-## Evidência de AMOSTRA em 18/09/2026 — não generalizar
+- Encontrar habilidades por código ou texto e filtrar por etapa e ano de forma coerente.
+- Selecionar códigos existentes na fonte, preservar a seleção durante edição/rotação e salvar corretamente no plano e no backup.
+- Apresentar ao professor os códigos e descrições fornecidos pelo catálogo, sem inventar transcrições ou declarar homologação/certificação MEC.
+- Em caso de catálogo indisponível ou código ausente, apresentar erro claro; não inventar habilidade nem apagar dados anteriores silenciosamente.
+- Identificar a fonte e a licença. A consulta aos documentos oficiais é uma opção quando o professor necessita de conferência normativa, não um passo obrigatório de cada planejamento.
 
-| Código | Conferência do código e texto | Referência verificável | Observação |
-| --- | --- | --- | --- |
-| EF01CI02 | Texto do snapshot coincide visualmente com o texto oficial, de `Localizar, nomear e representar graficamente` até `explicar suas funções.` | BNCC EI/EF PDF, páginas PDF **31 e 335** (índices de página 30 e 334); a página 31 apresenta um quadro ilustrativo e a 335 reúne habilidades do 1º ano de Ciências. | **Falso alarme encerrado:** localizador `página PDF 31` do snapshot é válido; códigos vizinhos localizados na página 335 também estão corretos. Não alterar metadado por proximidade numérica. Opcional: registrar ambos os locais. |
-| EF01CO01 | Código e texto do snapshot correspondem ao quadro oficial sobre organização de objetos. | Anexo de Computação PDF, página PDF **16** (índice de página 15), quadro Computação — 1º ano. | Complemento, não etapa independente. |
+## Amostra conferida em 18/09/2026 — não generalizar
 
-As duas comparações são pontuais. Não foram conferidas todas as páginas, variantes de fonte, faixas etárias e vigência; tampouco foi validada a completude normativa do catálogo. Não utilizar o percentual de 2/1.721 para inferir a qualidade dos demais.
+| Código | Conferência pontual | Documento |
+| --- | --- | --- |
+| EF01CI02 | Código e texto do snapshot coincidem visualmente com o documento oficial; o localizador PDF p. 31 é válido e a habilidade também está no quadro da p. 335. Não modificar metadados por suposta proximidade numérica. | [BNCC Educação Infantil e Ensino Fundamental](https://basenacionalcomum.mec.gov.br/images/BNCC_EI_EF_110518_versaofinal_site.pdf) |
+| EF01CO01 | Código e texto coincidem com o quadro de Computação para o primeiro ano, p. 16. | [Complemento de Computação](https://basenacionalcomum.mec.gov.br/images/historico/anexo_parecer_cneceb_n_2_2022_bncc_computacao.pdf) |
 
-## Salvaguardas de produto
+Também existem documentos para [Ensino Médio](https://www.gov.br/mec/pt-br/cne/bncc_ensino_medio.pdf), a [Resolução CNE/CEB nº 1/2022](https://portal.mec.gov.br/docman/outubro-2022-pdf/241671-rceb001-22/file) e o [portal oficial BNCC](https://basenacionalcomum.mec.gov.br/). A fonte secundária do snapshot está em [bncc-dev/bncc-dados](https://github.com/bncc-dev/bncc-dados). Essas duas amostras não autorizam dizer que as 1.721 entradas foram verificadas ou que o catálogo é oficial.
 
-- Buscas e seleção BNCC acontecem no dispositivo, sem transmitir o plano ou dados escolares ao provedor independente.
-- UI mostra que o conjunto é independente/não homologado e orienta consulta ao documento oficial. Esse aviso, isoladamente, **não substitui uma auditoria antes de disponibilizar o produto**.
-- A versão final não pode completar planos automaticamente com habilidades não verificadas, inventar código ou apresentar uma explicação gerada como transcrição normativa. Separar o texto oficial, a interpretação pedagógica e sugestões de aula com origem identificada.
-- Falha de consulta/ausência de fonte deve resultar em estado explícito de indisponibilidade, não em conteúdo inventado. Nenhuma alteração do catálogo é liberada apenas por contar 1.721 entradas.
+## Trabalho editorial opcional, fora dos gates desta entrega
 
-## Bloqueios antes da homologação editorial
+Para uma eventual homologação editorial do nosso próprio conjunto de dados, seria necessário congelar versão e documentos com hash e data; confrontar código, texto integral, componente, ano, complemento e referência por entrada; registrar divergências e erratas; e obter revisão pedagógica. Esse processo **não integra o escopo nem impede o aceite funcional atual**. Não empregar os termos “homologado pelo MEC”, “fonte oficial” ou “todos os textos verificados” sem evidência específica.
 
-1. Congelar uma cópia integral da versão exata do catálogo e dos documentos oficiais (incluindo erratas/revisões), com SHA-256 e data de coleta.
-2. Produzir relatório **por entrada** confrontando código, texto integral, etapa, componente, ano/faixa etária, natureza do complemento, fonte e localizador; marcar conferida/divergente/pendente.
-3. Conferir PDF e planilhas oficiais com especial atenção a textos repetidos em páginas ilustrativas: o caso EF01CI02 demonstra que páginas distantes não significam erro por si só.
-4. Tratar diferenças na origem com rastreabilidade, preservar alterações humanas, revisar vigência e erratas posteriores ao snapshot de terceiros.
-5. Revisão pedagógica e aceite da titular. Até a conclusão, não usar no aplicativo ou divulgação `fonte oficial`, `homologado` ou `todos os textos verificados`.
-
-A validação funcional do seletor (busca, filtros, rotação, persistência de códigos) é um gate SEPARADO da auditoria editorial. Somente dados sintéticos nos testes.
+Os testes do seletor, da persistência e do backup seguem obrigatórios e independem da auditoria editorial opcional. Utilizar apenas dados sintéticos nos testes.
