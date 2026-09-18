@@ -222,7 +222,12 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         return id
     }
 
+    /** Typed state action uses the Activity's existing commit callback, which reads a fresh snapshot after success. */
     fun updateLesson(classroomId: Long, lessonId: Long, input: LessonPlanV6.Input) {
+        input.statusTransition?.let { target ->
+            LessonStatusV8.transition(writableDatabase, classroomId, lessonId, target)
+            return
+        }
         val value = LessonPlanV6.validated(input)
         val changed = writableDatabase.update("lessons", values(
             "title" to value.title, "subject" to value.subject, "day" to value.day, "time" to value.time,
@@ -277,7 +282,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     /** Edits an existing pedagogical observation without changing its identity or original date. */
     fun updateObservation(classroomId: Long, observationId: Long, studentId: Long?, kind: String, body: String, shareApproved: Boolean) {
         require(body.trim().length >= 5) { "Descreva a observação com ao menos 5 caracteres." }
-        require(kind in listOf("Comportamento", "Participação", "Aprendizagem", "Outro")) { "Tipo de observação inválido." }
+        require(kind in listOf("Comportamento", "Participação", "Aprendizagem", "Outro")) { "Selecione um tipo válido." }
         if (studentId != null) {
             readableDatabase.rawQuery("SELECT 1 FROM students WHERE id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString())).use { c ->
                 require(c.moveToFirst()) { "Aluno não pertence a esta turma." }
