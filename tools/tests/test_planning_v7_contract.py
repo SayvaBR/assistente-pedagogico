@@ -11,9 +11,10 @@ TESTS = ROOT / "app/src/androidTest/java/com/sayvabr/assistentepedagogico/data"
 class PlanningActivityV7ContractTest(unittest.TestCase):
     def test_activities_are_migrated_in_primary_database_and_use_shared_store(self):
         store = (DATA / "TeacherStore.kt").read_text(encoding="utf-8")
-        self.assertIn('"pedagogico.db", null, LessonActivityV7.VERSION', store)
+        self.assertIn('"pedagogico.db", null, LessonStatusV8.VERSION', store)
         self.assertIn('LessonActivityV7.migrate(db)', store)
         self.assertIn('if (oldVersion < 7) LessonActivityV7.migrate(db)', store)
+        self.assertIn('if (oldVersion < 8) LessonStatusV8.migrate(db)', store)
         self.assertIn('fun saveActivity(input: LessonActivityV7.Input)', store)
         self.assertIn('fun listActivities(classroomId: Long', store)
         self.assertIn('fun duplicateActivity(classroomId: Long', store)
@@ -34,13 +35,13 @@ class PlanningActivityV7ContractTest(unittest.TestCase):
             self.assertIn(action, editor)
         self.assertIn('withContext(Dispatchers.IO)', editor)
         self.assertIn('confirmDelete', editor)
-        self.assertNotIn('TeacherStore(', editor)  # Never allocate a second helper inside a screen.
+        self.assertNotIn('TeacherStore(', editor)
 
     def test_legacy_and_fresh_install_have_android_persistence_regressions(self):
         legacy = (TESTS / "TeacherStoreV7MigrationTest.kt").read_text(encoding="utf-8")
         fresh = (TESTS / "TeacherStoreV7FreshInstallTest.kt").read_text(encoding="utf-8")
         self.assertIn('db.version = LessonPlanV6.VERSION', legacy)
-        self.assertIn('assertEquals(LessonActivityV7.VERSION', legacy)
+        self.assertIn('assertEquals(LessonStatusV8.VERSION', legacy)
         self.assertIn('first.saveActivity(', legacy)
         self.assertIn('reopened.listActivities(', legacy)
         self.assertIn('first.duplicateActivity(', fresh)
