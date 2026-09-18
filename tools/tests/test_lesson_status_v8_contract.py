@@ -36,6 +36,7 @@ class LessonStatusV8ContractTest(unittest.TestCase):
         editor = (UI / "LessonEditorV6.kt").read_text(encoding="utf-8")
         app = (UI / "TeacherApp.kt").read_text(encoding="utf-8")
         planner = (UI / "PlanningWorkspace.kt").read_text(encoding="utf-8")
+        tiles = (UI / "PlanningVisualKit.kt").read_text(encoding="utf-8")
         self.assertIn('save(editorInput().copy(statusTransition = target))', editor)
         for action in ('Marcar como pronto', 'Marcar como concluído', 'Reabrir como rascunho', 'Reabrir como pronto'):
             self.assertIn(action, editor)
@@ -44,7 +45,9 @@ class LessonStatusV8ContractTest(unittest.TestCase):
         self.assertNotIn('TeacherStore(', editor)
         self.assertIn('store.updateLesson(lessonClass.id, lesson.id, input)', app)
         self.assertIn('operation(); store.read()', app)
-        self.assertIn('Estado: ${lesson.status.label}', planner)
+        # Status is displayed by the reusable tile, not duplicated in the calendar screen.
+        self.assertIn('PlanningLessonTile(lesson', planner)
+        self.assertIn('lesson.status.label', tiles)
         self.assertIn('"Arquivados" -> lesson.archived', planner)
 
     def test_backup_and_instrumentation_preserve_status_and_archival_origin(self):
