@@ -1,4 +1,4 @@
-"""The emulator tests document I/O; this contract protects the destructive restore UI and stream limits."""
+"""The emulator tests document I/O; this contract protects destructive restore UI and stream limits."""
 import unittest
 from pathlib import Path
 
@@ -10,8 +10,11 @@ class PlanningBackupUiContract(unittest.TestCase):
     def test_backup_accessible_without_a_class_and_uses_single_store(self):
         workspace = (UI / "PlanningWorkspace.kt").read_text(encoding="utf-8")
         panel = (UI / "PlanningBackupPanel.kt").read_text(encoding="utf-8")
-        self.assertIn("PlanningBackupPanel()", workspace)
-        self.assertLess(workspace.index("PlanningBackupPanel()"), workspace.index("if (classroom == null)"))
+        # The collapsible backup is a top-level section after the class-dependent cards.
+        # There must be no early return for an installation without a class.
+        self.assertIn("if (backupExpanded) { Spacer(Modifier.height(8.dp)); PlanningBackupPanel() }", workspace)
+        self.assertIn('"Backup e recuperação"', workspace)
+        self.assertNotIn("\n        return\n", workspace[workspace.index("if (classroom == null)"):workspace.index("PlanningBackupPanel()")])
         self.assertIn("LocalTeacherStore.current", panel)
         self.assertNotIn("TeacherStore(", panel)
 
@@ -33,13 +36,9 @@ class PlanningBackupUiContract(unittest.TestCase):
             self.assertIn(part, panel)
         self.assertGreater(panel.index("store.restoreBackupAfterConfirmation"), panel.index("confirmButton ="))
         self.assertNotIn("openOrCreateDatabase", panel)
-        # Follow the extracted production implementation rather than checking for a buffer in the UI.
         for part in (
-            "10 * 1024 * 1024",
-            "ByteArrayOutputStream()",
-            "openInputStream(uri)",
-            'openOutputStream(uri, "wt")',
-            "contents.size() + count <= MAX_BYTES",
+            "10 * 1024 * 1024", "ByteArrayOutputStream()", "openInputStream(uri)",
+            'openOutputStream(uri, "wt")', "contents.size() + count <= MAX_BYTES",
             "bytes.size <= MAX_BYTES",
         ):
             self.assertIn(part, streams)
