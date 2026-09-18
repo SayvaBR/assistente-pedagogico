@@ -9,6 +9,7 @@ import org.json.JSONObject
  */
 object TeacherBackupCodec {
     const val FORMAT = "assistente-pedagogico-backup"
+    // v5 appointment attributes extend v1 with optional keys; existing v1 files remain readable.
     const val VERSION = 1
 
     fun encode(snapshot: TeacherSnapshot): String = JSONObject().apply {
@@ -35,6 +36,10 @@ object TeacherBackupCodec {
         }) } })
         put("appointments", JSONArray().apply { snapshot.appointments.forEach { a -> put(JSONObject().apply {
             put("id", a.id); put("title", a.title); put("date", a.date); put("time", a.time)
+            // Preserve v5 attributes. Legacy entries keep endTime == time (unknown duration),
+            // never silently assign an invented duration in an export.
+            put("endTime", a.endTime); put("type", a.type)
+            put("classroomId", a.classroomId ?: JSONObject.NULL)
         }) } })
         // SAF grants are device/provider capabilities, not portable backup data. URI strings are retained
         // only so restore can show the catalog entry as requiring reauthorization on another install.
