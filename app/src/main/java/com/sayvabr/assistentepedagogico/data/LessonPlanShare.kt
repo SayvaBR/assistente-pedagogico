@@ -54,12 +54,10 @@ object LessonPlanShare {
         val plan = LessonPlanV6.validated(input)
         val room = classroomName.trim()
         require(room.isNotEmpty()) { "Selecione uma turma para compartilhar o plano." }
-        // Validate the layout again before exposing a document outside the app.
-        val blocks = PlanLayoutV9.decode(PlanLayoutV9.encode(layout)).blocks
+        // PlanComposition's constructor verifies unique IDs, native kinds and required identification.
+        // Keep the formatter independent of Android's JSONObject for pure JVM regressions.
+        val blocks = layout.blocks
         val result = StringBuilder("PLANO DE AULA — PRÉVIA PARA COMPARTILHAMENTO\n")
-        fun line(label: String, value: String) {
-            if (value.isNotBlank()) result.append(label).append(": ").append(value).append('\n')
-        }
         blocks.forEach { block ->
             val lines = StringBuilder()
             fun emit(label: String, value: String) {
