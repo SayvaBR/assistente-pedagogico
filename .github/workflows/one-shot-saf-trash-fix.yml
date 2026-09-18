@@ -1,0 +1,44 @@
+name: One-shot SAF trash callback cleanup
+on:
+  push:
+    branches: [feat/14-navigation-visual-integration]
+    paths:
+      - .github/workflows/one-shot-saf-trash-fix.yml
+permissions:
+  contents: write
+concurrency:
+  group: one-shot-saf-trash-fix
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.repository == 'SayvaBR/assistente-pedagogico' && github.ref == 'refs/heads/feat/14-navigation-visual-integration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/14-navigation-visual-integration
+          persist-credentials: true
+      - name: Apply exact scoped patch or abort, always remove privileged workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=app/src/main/java/com/sayvabr/assistentepedagogico/ui/TeacherApp.kt
+          files=app/src/main/java/com/sayvabr/assistentepedagogico/ui/FileCatalogScreen.kt
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if test "$(git hash-object "$app")" = '8c8acc17d1ac52f19d588c0059eb0f1da1dec683' && \
+             test "$(git hash-object "$files")" = 'd3a35747e2ed2250249bd780bf72974ec39e2d84'; then
+            if python3 tools/one_shot_saf_trash_fix.py; then
+              git add "$app" "$files"
+            else
+              echo 'Patch aborted, do not overwrite concurrent changes.'
+            fi
+          else
+            echo 'Pinned file SHA changed; cleanup without patch.'
+          fi
+          git rm tools/one_shot_saf_trash_fix.py .github/workflows/one-shot-saf-trash-fix.yml
+          git diff --cached --check
+          git commit -m 'fix(files): reserve SAF permission release for definitive purge only'
+          git push origin HEAD:refs/heads/feat/14-navigation-visual-integration
