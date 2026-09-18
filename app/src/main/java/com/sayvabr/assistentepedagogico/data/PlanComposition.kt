@@ -1,11 +1,8 @@
 package com.sayvabr.assistentepedagogico.data
 
 /**
- * Pure domain model for the future plan composer, independent of Compose/SQLite.
- *
- * This engine does not migrate or persist lessons yet. Existing LessonPlanV6 remains the
- * canonical record until the v9 schema, backup and UI are implemented together.
- * The enum defines semantic identity, NOT a mandatory display order.
+ * Immutable domain model for the v9 plan composer. The enum defines semantic identity,
+ * not a mandatory display order. Canonical lesson fields still live in LessonPlanV6.
  */
 enum class PlanBlockKind(val defaultTitle: String) {
     IDENTIFICATION("Identificação"),
@@ -28,7 +25,7 @@ data class PlanBlock(
     val id: String,
     val kind: PlanBlockKind,
     val title: String = kind.defaultTitle,
-    /** Used for custom sections and draft-only content; BNCC authoritative text is NEVER generated here. */
+    /** Only custom sections retain arbitrary text; no BNCC text is generated. */
     val body: String = "",
     val minutes: Int? = null,
 )
@@ -46,7 +43,7 @@ data class PlanTemplate(val name: String, val blocks: List<PlanBlock>) {
     fun instantiate(): PlanComposition = PlanComposition(blocks.map { it.copy() })
 }
 
-/** Immutable editing operations can be tested before wiring to persistence and UI. */
+/** Immutable editing operations preserve section identity across movement and saves. */
 data class PlanComposition(val blocks: List<PlanBlock>) {
     init {
         require(blocks.size in 1..40) { "O plano deve conter de 1 a 40 seções." }
@@ -114,11 +111,13 @@ data class PlanComposition(val blocks: List<PlanBlock>) {
                 PlanBlock("objectives", PlanBlockKind.OBJECTIVES),
                 PlanBlock("content", PlanBlockKind.CONTENT),
                 PlanBlock("bncc", PlanBlockKind.BNCC),
+                PlanBlock("context", PlanBlockKind.CONTEXT),
                 PlanBlock("methodology", PlanBlockKind.METHODOLOGY),
                 PlanBlock("opening", PlanBlockKind.OPENING),
                 PlanBlock("development", PlanBlockKind.DEVELOPMENT),
                 PlanBlock("closing", PlanBlockKind.CLOSING),
                 PlanBlock("assessment", PlanBlockKind.ASSESSMENT),
+                PlanBlock("adaptations", PlanBlockKind.ADAPTATIONS),
             )
         )
     }
