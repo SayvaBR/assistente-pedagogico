@@ -14,7 +14,8 @@ data class Student(val id: Long, val classroomId: Long, val name: String)
 data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String, val archived: Boolean = false,
     val durationMinutes: Int = 50, val specificObjectives: String = "", val bnccCodes: String = "", val justification: String = "",
     val opening: String = "", val openingMinutes: Int = 0, val development: String = "", val developmentMinutes: Int = 0,
-    val closing: String = "", val closingMinutes: Int = 0, val assessment: String = "", val adaptations: String = "")
+    val closing: String = "", val closingMinutes: Int = 0, val assessment: String = "", val adaptations: String = "",
+    val status: LessonStatus = LessonStatus.DRAFT)
 data class Attendance(val classroomId: Long, val studentId: Long, val date: String, val status: String)
 data class Observation(val id: Long, val classroomId: Long, val studentId: Long?, val kind: String, val body: String, val date: String, val shareApproved: Boolean)
 data class Appointment(val id: Long, val title: String, val date: String, val time: String,
@@ -36,7 +37,7 @@ data class TeacherSnapshot(
     val folders: List<FileFolder> = emptyList(),
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, LessonActivityV7.VERSION) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, LessonStatusV8.VERSION) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -54,11 +55,12 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         AppointmentV5.migrate(db)
         LessonPlanV6.migrate(db)
         LessonActivityV7.migrate(db)
+        LessonStatusV8.migrate(db)
     }
 
     /** SQLiteOpenHelper wraps onUpgrade in a transaction, rolling back every ALTER on failure. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..6 && newVersion == LessonActivityV7.VERSION) {
+        require(oldVersion in 1..7 && newVersion == LessonStatusV8.VERSION) {
             "Unsupported database migration from $oldVersion to $newVersion"
         }
         if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
@@ -67,6 +69,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         if (oldVersion < 5) AppointmentV5.migrate(db)
         if (oldVersion < 6) LessonPlanV6.migrate(db)
         if (oldVersion < 7) LessonActivityV7.migrate(db)
+        if (oldVersion < 8) LessonStatusV8.migrate(db)
     }
 
     fun read(): TeacherSnapshot {
@@ -78,9 +81,9 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         val students = mutableListOf<Student>()
         db.rawQuery("SELECT id,classroom_id,name FROM students ORDER BY name COLLATE NOCASE", null).use { c -> while (c.moveToNext()) students += Student(c.getLong(0), c.getLong(1), c.getString(2)) }
         val lessons = mutableListOf<Lesson>()
-        db.rawQuery("SELECT id,classroom_id,title,subject,day,time,objective,content,method,archived,duration_minutes,specific_objectives,bncc_codes,justification,opening,opening_minutes,development,development_minutes,closing,closing_minutes,assessment,adaptations FROM lessons ORDER BY day,time", null).use { c -> while (c.moveToNext()) lessons += Lesson(
+        db.rawQuery("SELECT id,classroom_id,title,subject,day,time,objective,content,method,archived,duration_minutes,specific_objectives,bncc_codes,justification,opening,opening_minutes,development,development_minutes,closing,closing_minutes,assessment,adaptations,pedagogical_status FROM lessons ORDER BY day,time", null).use { c -> while (c.moveToNext()) lessons += Lesson(
             c.getLong(0), c.getLong(1), c.getString(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getString(7), c.getString(8), c.getInt(9) == 1,
-            c.getInt(10), c.getString(11), c.getString(12), c.getString(13), c.getString(14), c.getInt(15), c.getString(16), c.getInt(17), c.getString(18), c.getInt(19), c.getString(20), c.getString(21)) }
+            c.getInt(10), c.getString(11), c.getString(12), c.getString(13), c.getString(14), c.getInt(15), c.getString(16), c.getInt(17), c.getString(18), c.getInt(19), c.getString(20), c.getString(21), LessonStatus.parse(c.getString(22))) }
         val attendance = mutableListOf<Attendance>()
         db.rawQuery("SELECT classroom_id,student_id,day,status FROM attendance", null).use { c -> while (c.moveToNext()) attendance += Attendance(c.getLong(0), c.getLong(1), c.getString(2), c.getString(3)) }
         val observations = mutableListOf<Observation>()
@@ -197,13 +200,13 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         writableDatabase.insertOrThrow("lessons", null, values("classroom_id" to classroomId, "title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()))
     }
 
-    /** Edits only a plan belonging to the selected classroom; keeps its ID and other records untouched. */
+    /** Edits only a draft belonging to the selected classroom; completed or ready plans must be explicitly reopened. */
     fun updateLesson(classroomId: Long, lessonId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {
         require(title.isNotBlank() && subject.isNotBlank() && objective.isNotBlank()) { "Preencha o título, a disciplina e o objetivo." }
         LocalDate.parse(date)
         LocalTime.parse(time)
-        val changed = writableDatabase.update("lessons", values("title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()), "id=? AND classroom_id=? AND archived=0", arrayOf(lessonId.toString(), classroomId.toString()))
-        require(changed == 1) { "Plano não encontrado nesta turma ou está arquivado." }
+        val changed = writableDatabase.update("lessons", values("title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()), "id=? AND classroom_id=? AND archived=0 AND pedagogical_status='draft'", arrayOf(lessonId.toString(), classroomId.toString()))
+        require(changed == 1) { "Plano não encontrado ou não está em rascunho. Reabra-o antes de editar." }
     }
 
     fun saveLesson(input: LessonPlanV6.Input, classroomId: Long): Long {
@@ -228,14 +231,17 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             "opening" to value.opening, "opening_minutes" to value.openingMinutes, "development" to value.development,
             "development_minutes" to value.developmentMinutes, "closing" to value.closing, "closing_minutes" to value.closingMinutes,
             "assessment" to value.assessment, "adaptations" to value.adaptations),
-            "id=? AND classroom_id=? AND archived=0", arrayOf(lessonId.toString(), classroomId.toString()))
-        require(changed == 1) { "Plano não encontrado nesta turma ou está arquivado." }
+            "id=? AND classroom_id=? AND archived=0 AND pedagogical_status='draft'", arrayOf(lessonId.toString(), classroomId.toString()))
+        require(changed == 1) { "Plano não encontrado ou não está em rascunho. Reabra-o antes de editar." }
     }
 
-    /** Reversible archival preserves the lesson, classroom and all historical data. */
+    /** Reversible archival preserves the plan's previous pedagogical status and linked activities. */
     fun setLessonArchived(classroomId: Long, lessonId: Long, archived: Boolean) {
-        val changed = writableDatabase.update("lessons", values("archived" to archived), "id=? AND classroom_id=?", arrayOf(lessonId.toString(), classroomId.toString()))
-        require(changed == 1) { "Plano não encontrado nesta turma." }
+        if (archived) {
+            LessonStatusV8.transition(writableDatabase, classroomId, lessonId, LessonStatus.ARCHIVED)
+        } else {
+            LessonStatusV8.restore(writableDatabase, classroomId, lessonId)
+        }
     }
 
     fun saveAttendance(classroomId: Long, day: String, marks: Map<Long, String>) {
