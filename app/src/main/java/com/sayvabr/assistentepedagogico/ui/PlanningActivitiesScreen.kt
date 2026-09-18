@@ -37,11 +37,17 @@ fun PlanningActivitiesScreen(
     var instructions by rememberSaveable(classroom?.id) { mutableStateOf("") }
     var duration by rememberSaveable(classroom?.id) { mutableStateOf("25") }
     var linkedLessonId by rememberSaveable(classroom?.id) { mutableLongStateOf(-1L) }
+    // Restore both the draft and its unsaved status: TeacherApp's discard flag is transient.
+    var fieldsDirty by rememberSaveable(classroom?.id) { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf<Long?>(null) }
     var confirmCancel by remember { mutableStateOf(false) }
     val room = classroom
     val availableLessons = lessons.filter { room != null && it.classroomId == room.id && !it.archived }
     val roomId = room?.id
+
+    LaunchedEffect(fieldsDirty) {
+        if (fieldsDirty) onDirty(true)
+    }
 
     LaunchedEffect(roomId) {
         if (roomId == null) {
@@ -56,6 +62,10 @@ fun PlanningActivitiesScreen(
         }
     }
 
+    fun markDirty() {
+        fieldsDirty = true
+        onDirty(true)
+    }
     fun resetEditor() {
         editing = false
         editingId = -1L
@@ -63,6 +73,7 @@ fun PlanningActivitiesScreen(
         instructions = ""
         duration = "25"
         linkedLessonId = -1L
+        fieldsDirty = false
         error = null
         onDirty(false)
     }
@@ -73,6 +84,7 @@ fun PlanningActivitiesScreen(
         instructions = activity?.instructions.orEmpty()
         duration = activity?.durationMinutes?.toString() ?: "25"
         linkedLessonId = activity?.lessonId ?: -1L
+        fieldsDirty = false
         error = null
         onDirty(false)
     }
@@ -156,15 +168,15 @@ fun PlanningActivitiesScreen(
         ApCard {
             ApEyebrow(if (editingId > 0) "Editar atividade" else "Nova atividade", onPrimary = false)
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(title, { if (title != it) { title = it; onDirty(true) } },
+            OutlinedTextField(title, { if (title != it) { title = it; markDirty() } },
                 modifier = Modifier.fillMaxWidth(), label = { Text("Título da atividade") }, singleLine = true)
             Spacer(Modifier.height(10.dp))
-            OutlinedTextField(instructions, { if (instructions != it) { instructions = it; onDirty(true) } },
+            OutlinedTextField(instructions, { if (instructions != it) { instructions = it; markDirty() } },
                 modifier = Modifier.fillMaxWidth(), label = { Text("Descrição e orientações") }, minLines = 3)
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(duration, { value ->
                 val cleaned = value.filter(Char::isDigit)
-                if (cleaned != duration) { duration = cleaned; onDirty(true) }
+                if (cleaned != duration) { duration = cleaned; markDirty() }
             }, modifier = Modifier.fillMaxWidth(), label = { Text("Duração estimada (minutos)") }, singleLine = true)
             Spacer(Modifier.height(14.dp))
             Text("Vincular a plano de aula (opcional)", fontWeight = FontWeight.ExtraBold, color = ApColors.Navy)
@@ -174,7 +186,7 @@ fun PlanningActivitiesScreen(
             choices.forEach { (id, label) ->
                 val selected = linkedLessonId == id
                 OutlinedButton(
-                    onClick = { if (linkedLessonId != id) { linkedLessonId = id; onDirty(true) } },
+                    onClick = { if (linkedLessonId != id) { linkedLessonId = id; markDirty() } },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, if (selected) ApColors.Primary else ApPalette.Outline),
