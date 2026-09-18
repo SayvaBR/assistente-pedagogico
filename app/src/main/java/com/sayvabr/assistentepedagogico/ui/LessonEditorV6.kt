@@ -8,13 +8,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sayvabr.assistentepedagogico.data.BnccCatalog
 import com.sayvabr.assistentepedagogico.data.Classroom
 import com.sayvabr.assistentepedagogico.data.Lesson
 import com.sayvabr.assistentepedagogico.data.LessonPlanV6
 
-/** Professional offline lesson-plan editor. BNCC codes are stored locally; catalog validation comes in the next slice. */
+/** Professional offline lesson editor, including validated BNCC selection. */
 @Composable
 fun LessonEditorV6(
     classroom: Classroom,
@@ -25,6 +27,7 @@ fun LessonEditorV6(
     archive: (() -> Unit)? = null,
     onDirty: () -> Unit = {},
 ) {
+    val context = LocalContext.current
     var title by rememberSaveable(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
     var subject by rememberSaveable(initial?.id) { mutableStateOf(initial?.subject.orEmpty()) }
     var day by rememberSaveable(initial?.id) { mutableStateOf(initial?.date ?: initialDay) }
@@ -46,10 +49,9 @@ fun LessonEditorV6(
     var adaptations by rememberSaveable(initial?.id) { mutableStateOf(initial?.adaptations.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmArchive by remember { mutableStateOf(false) }
+    var showBnccPicker by rememberSaveable { mutableStateOf(false) }
+    var catalogue by remember { mutableStateOf<BnccCatalog?>(null) }
 
-    fun field(label: String, value: String, multiline: Boolean = false, change: (String) -> Unit) {
-        // local helper intentionally unused outside this composable; Compose calls below keep labels explicit.
-    }
     fun update(old: String, next: String, setter: (String) -> Unit) {
         if (old != next) { setter(next); error = null; onDirty() }
     }
@@ -91,8 +93,21 @@ fun LessonEditorV6(
             TextField("Objetivo geral", objective, true) { objective = it }
             TextField("Objetivos específicos (opcional)", specific, true) { specific = it }
             TextField("Conteúdo / objeto de conhecimento", content, true) { content = it }
-            TextField("Habilidades BNCC — códigos separados por vírgula", bncc, true) { bncc = it }
-            Text("Os códigos são armazenados agora; a seleção pelo catálogo oficial será conectada em uma próxima etapa.", color = ApColors.Navy)
+            OutlinedTextField(
+                value = bncc,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Habilidades BNCC selecionadas") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            ApRaisedButton("Buscar e selecionar habilidades BNCC", onClick = {
+                runCatching { catalogue ?: BnccCatalog.load(context) }
+                    .onSuccess { catalogue = it; error = null; showBnccPicker = true }
+                    .onFailure { error = "Catálogo BNCC offline indisponível: ${it.message ?: "verifique a instalação."}" }
+            }, glyph = ApGlyphKind.CHECK, secondary = true)
+            Text("Catálogo completo disponível sem internet. Os códigos são conferidos antes de salvar.", color = ApColors.Navy)
             Spacer(Modifier.height(9.dp))
             TextField("Justificativa / contextualização (opcional)", justification, true) { justification = it }
         }
@@ -121,9 +136,15 @@ fun LessonEditorV6(
                     developmentMinutes.toIntOrNull() ?: 0, closing, closingMinutes.toIntOrNull() ?: 0,
                     assessment, adaptations,
                 )
-                runCatching { LessonPlanV6.validated(input) }
-                    .onSuccess(save)
-                    .onFailure { error = it.message ?: "Revise os campos do plano." }
+                runCatching {
+                    val valid = LessonPlanV6.validated(input)
+                    if (valid.bnccCodes.isNotBlank()) {
+                        val verified = catalogue ?: BnccCatalog.load(context)
+                        val unknown = verified.unknownCodes(valid.bnccCodes)
+                        require(unknown.isEmpty()) { "Códigos BNCC não encontrados: ${unknown.joinToString(", ")}. Selecione habilidades verificadas." }
+                    }
+                    save(valid)
+                }.onFailure { error = it.message ?: "Revise os campos do plano." }
             }, glyph = ApGlyphKind.CHECK)
             if (archive != null) {
                 Spacer(Modifier.height(10.dp))
@@ -131,6 +152,16 @@ fun LessonEditorV6(
             }
         }
     }
+
+    if (showBnccPicker && catalogue != null) BnccPicker(
+        catalog = requireNotNull(catalogue),
+        initialCodes = BnccCatalog.parseCodes(bncc),
+        onConfirm = { codes ->
+            update(bncc, codes.joinToString(", ")) { bncc = it }
+            showBnccPicker = false
+        },
+        onDismiss = { showBnccPicker = false },
+    )
 
     if (confirmArchive && archive != null) AlertDialog(
         onDismissRequest = { confirmArchive = false },
