@@ -52,6 +52,10 @@ class BnccPickerRestorationInstrumentedTest {
         compose.onNodeWithText("Fundamental").performClick()
         // Query is input #0; the grade field appears as input #1 only in Fundamental.
         compose.onAllNodes(hasSetTextAction())[1].performTextInput("5")
+        // The final filter is off-screen in the horizontal LazyRow on small phones.
+        // A real user has to scroll that row first; directly searching for an uncomposed
+        // LazyRow item caused a false failure even though the search implementation worked.
+        compose.onAllNodes(hasScrollToIndexAction()).onFirst().performScrollToIndex(4)
         compose.onNodeWithText("Computação").performClick()
         compose.onNodeWithText("0 selecionada(s) · 100 resultado(s) exibidos").assertExists()
     }
