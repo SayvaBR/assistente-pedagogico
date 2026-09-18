@@ -1,14 +1,11 @@
 package com.sayvabr.assistentepedagogico.data
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -16,7 +13,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Synthetic legacy database only. Never run destructive database fixtures on physical devices. */
+/** Synthetic legacy database only. Never run destructive fixtures on physical devices. */
 @RunWith(AndroidJUnit4::class)
 class TeacherStoreV7MigrationTest {
     private lateinit var context: Context
@@ -61,8 +58,9 @@ class TeacherStoreV7MigrationTest {
     @Test fun v6UpgradeKeepsExistingDataAndActivitiesPersistAfterReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(LessonActivityV7.VERSION, first.readableDatabase.version)
+        assertEquals(LessonStatusV8.VERSION, first.readableDatabase.version)
         assertEquals("Plano histórico", first.read().lessons.single { it.id == 17L }.title)
+        assertEquals(LessonStatus.DRAFT, first.read().lessons.single { it.id == 17L }.status)
         assertEquals("10:00", first.read().appointments.single().time)
         assertEquals(31L, first.read().files.single().id)
         assertTrue(first.listActivities(7).isEmpty())
@@ -76,12 +74,13 @@ class TeacherStoreV7MigrationTest {
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(LessonActivityV7.VERSION, reopened.readableDatabase.version)
+        assertEquals(LessonStatusV8.VERSION, reopened.readableDatabase.version)
         assertEquals(id, reopened.listActivities(7, 17).single().id)
         assertTrue(reopened.listActivities(8).isEmpty())
         assertEquals(31L, reopened.read().files.single().id)
         assertEquals(2, reopened.read().lessons.size)
         reopened.setLessonArchived(7, 17, true)
+        assertEquals(LessonStatus.ARCHIVED, reopened.read().lessons.single { it.id == 17L }.status)
         assertThrows(IllegalArgumentException::class.java) {
             reopened.saveActivity(LessonActivityV7.Input(7, 17, "Plano arquivado", "Não permitir inclusão em plano arquivado.", 15))
         }
