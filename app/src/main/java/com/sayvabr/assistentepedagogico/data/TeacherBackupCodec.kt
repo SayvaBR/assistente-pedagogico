@@ -13,6 +13,8 @@ object TeacherBackupCodec {
         snapshot: TeacherSnapshot,
         activities: List<LessonActivityV7.Activity> = emptyList(),
         archiveOrigins: Map<Long, LessonStatus> = emptyMap(),
+        layouts: List<Pair<Long, String>> = emptyList(),
+        templates: List<Triple<Long, String, String>> = emptyList(),
     ): String = JSONObject().apply {
         put("format", FORMAT)
         put("version", VERSION)
@@ -61,6 +63,14 @@ object TeacherBackupCodec {
         put("folders", JSONArray().apply { snapshot.folders.forEach { f -> put(JSONObject().apply {
             put("id", f.id); put("name", f.name)
         }) } })
+        put("lessonLayouts", JSONArray().apply { layouts.forEach { (lessonId, raw) ->
+            require(lessonId > 0)
+            put(JSONObject().put("lessonId", lessonId).put("layout", JSONObject(PlanLayoutV9.encode(PlanLayoutV9.decode(raw)))))
+        } })
+        put("planTemplates", JSONArray().apply { templates.forEach { (id, name, raw) ->
+            val template = PlanTemplate(name, PlanLayoutV9.decode(raw).blocks)
+            put(JSONObject().put("id", id).put("name", template.name).put("layout", JSONObject(PlanLayoutV9.encode(template.instantiate()))))
+        } })
     }.toString()
 
     /** Validate envelope and ownership before preview or restore can touch SQLite. */
@@ -80,7 +90,10 @@ object TeacherBackupCodec {
             root.put("folders", JSONArray())
         }
         if (!root.has("activities")) root.put("activities", JSONArray())
-        listOf("classrooms", "students", "lessons", "activities", "attendance", "observations", "appointments", "files", "folders").forEach {
+        // New optional v9 content defaults to empty for previously exported v1 archives.
+        if (!root.has("lessonLayouts")) root.put("lessonLayouts", JSONArray())
+        if (!root.has("planTemplates")) root.put("planTemplates", JSONArray())
+        listOf("classrooms", "students", "lessons", "activities", "attendance", "observations", "appointments", "files", "folders", "lessonLayouts", "planTemplates").forEach {
             require(root.optJSONArray(it) != null) { "Backup incompleto: $it." }
         }
         TeacherBackupIntegrity.validate(root)
