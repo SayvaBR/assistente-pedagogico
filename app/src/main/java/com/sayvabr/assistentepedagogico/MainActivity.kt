@@ -8,14 +8,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import com.sayvabr.assistentepedagogico.data.TeacherStore
 import com.sayvabr.assistentepedagogico.ui.ApColors
 import com.sayvabr.assistentepedagogico.ui.ApTheme
+import com.sayvabr.assistentepedagogico.ui.LocalTeacherStore
 import com.sayvabr.assistentepedagogico.ui.TeacherApp
 
 class MainActivity : ComponentActivity() {
-    private val store by lazy { TeacherStore(applicationContext) }
+    private val storeDelegate = lazy { TeacherStore(applicationContext) }
+    private val store by storeDelegate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,14 +29,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             ApTheme {
                 Box(Modifier.fillMaxSize().background(ApColors.Sky).statusBarsPadding().imePadding()) {
-                    TeacherApp(store)
+                    CompositionLocalProvider(LocalTeacherStore provides store) {
+                        TeacherApp(store)
+                    }
                 }
             }
         }
     }
 
     override fun onDestroy() {
-        if (isFinishing) store.close()
+        // Rotation/configuration replacement owns a new helper, while this one must be closed.
+        // Lazy.isInitialized avoids creating a database connection solely to close it.
+        if (storeDelegate.isInitialized()) store.close()
         super.onDestroy()
     }
 }

@@ -15,7 +15,11 @@ data class Lesson(val id: Long, val classroomId: Long, val title: String, val su
 data class Attendance(val classroomId: Long, val studentId: Long, val date: String, val status: String)
 data class Observation(val id: Long, val classroomId: Long, val studentId: Long?, val kind: String, val body: String, val date: String, val shareApproved: Boolean)
 data class Appointment(val id: Long, val title: String, val date: String, val time: String)
-data class SavedFile(val id: Long, val name: String, val uri: String)
+data class SavedFile(
+    val id: Long, val name: String, val uri: String,
+    val folderId: Long? = null, val favorite: Boolean = false,
+    val trashedAt: String? = null, val accessState: String = "unknown",
+)
 data class TeacherSnapshot(
     val profile: TeacherProfile?,
     val classrooms: List<Classroom>,
@@ -25,9 +29,10 @@ data class TeacherSnapshot(
     val observations: List<Observation>,
     val appointments: List<Appointment>,
     val files: List<SavedFile>,
+    val folders: List<FileFolder> = emptyList(),
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, 3) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, FileLibraryV4.VERSION) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -41,13 +46,18 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
             "CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL)",
             "CREATE TABLE saved_files (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uri TEXT NOT NULL UNIQUE)",
         ).forEach(db::execSQL)
+        FileLibraryV4.migrate(db)
     }
 
+    /** SQLiteOpenHelper wraps onUpgrade in a transaction, rolling back every ALTER on failure. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-    require(oldVersion in 1..2 && newVersion == 3) { "Unsupported database migration from $oldVersion to $newVersion" }
-    if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
-    if (oldVersion < 3) db.execSQL("ALTER TABLE lessons ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
-}
+        require(oldVersion in 1..3 && newVersion == FileLibraryV4.VERSION) {
+            "Unsupported database migration from $oldVersion to $newVersion"
+        }
+        if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        if (oldVersion < 3) db.execSQL("ALTER TABLE lessons ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        if (oldVersion < 4) FileLibraryV4.migrate(db)
+    }
 
     fun read(): TeacherSnapshot {
         val db = readableDatabase
@@ -65,10 +75,24 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         db.rawQuery("SELECT id,classroom_id,student_id,kind,body,day,share_approved FROM observations ORDER BY id DESC", null).use { c -> while (c.moveToNext()) observations += Observation(c.getLong(0), c.getLong(1), if (c.isNull(2)) null else c.getLong(2), c.getString(3), c.getString(4), c.getString(5), c.getInt(6) == 1) }
         val appointments = mutableListOf<Appointment>()
         db.rawQuery("SELECT id,title,day,time FROM appointments ORDER BY day,time", null).use { c -> while (c.moveToNext()) appointments += Appointment(c.getLong(0), c.getString(1), c.getString(2), c.getString(3)) }
-        val files = mutableListOf<SavedFile>()
-        db.rawQuery("SELECT id,name,uri FROM saved_files ORDER BY id DESC", null).use { c -> while (c.moveToNext()) files += SavedFile(c.getLong(0), c.getString(1), c.getString(2)) }
-        return TeacherSnapshot(profile, classrooms, students, lessons, attendance, observations, appointments, files)
+        val files = FileLibraryV4.files(db).filter { it.trashedAt == null }.map {
+            SavedFile(it.id, it.name, it.uri, it.folderId, it.favorite, it.trashedAt, it.accessState)
+        }
+        return TeacherSnapshot(profile, classrooms, students, lessons, attendance, observations, appointments, files, FileLibraryV4.folders(db))
     }
+
+    /** This is the only source of trashed catalog references; normal snapshots hide the trash. */
+    fun libraryFiles(): List<LibraryFile> = FileLibraryV4.files(readableDatabase)
+    fun fileFolders(): List<FileFolder> = FileLibraryV4.folders(readableDatabase)
+    fun createFolder(name: String): Long = FileLibraryV4.createFolder(writableDatabase, name)
+    fun renameFolder(folderId: Long, name: String) = FileLibraryV4.renameFolder(writableDatabase, folderId, name)
+    fun deleteFolder(folderId: Long) = FileLibraryV4.deleteFolder(writableDatabase, folderId)
+    fun moveFile(fileId: Long, folderId: Long?) = FileLibraryV4.moveFile(writableDatabase, fileId, folderId)
+    fun setFileFavorite(fileId: Long, favorite: Boolean) = FileLibraryV4.setFavorite(writableDatabase, fileId, favorite)
+    fun trashFile(fileId: Long) = FileLibraryV4.trash(writableDatabase, fileId)
+    fun restoreFile(fileId: Long) = FileLibraryV4.restore(writableDatabase, fileId)
+    fun permanentlyRemoveFileReference(fileId: Long) = FileLibraryV4.permanentlyRemoveReference(writableDatabase, fileId)
+    fun setFileAccessState(fileId: Long, state: String) = FileLibraryV4.setAccessState(writableDatabase, fileId, state)
 
     private fun values(vararg pairs: Pair<String, Any?>) = ContentValues().apply {
         pairs.forEach { (key, value) -> when (value) {
@@ -109,21 +133,18 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         val db = writableDatabase
         db.beginTransaction()
         try {
-  db.rawQuery("SELECT archived FROM classrooms WHERE id=?", arrayOf(classroomId.toString())).use { c ->
-      require(c.moveToFirst()) { "Turma não encontrada." }
-      if ((c.getInt(0) == 1) == archived) {
-          db.setTransactionSuccessful()
-          return
-      }
-  }
-  if (!archived) {
-      db.rawQuery("SELECT COUNT(*) FROM classrooms WHERE archived=0", null).use { c ->
-          c.moveToFirst()
-          require(c.getInt(0) < 2) { "O plano gratuito permite até 2 turmas ativas. Arquive outra turma para restaurar esta." }
-      }
-  }
-  require(db.update("classrooms", values("archived" to archived), "id=?", arrayOf(classroomId.toString())) == 1)
-  db.setTransactionSuccessful()
+            db.rawQuery("SELECT archived FROM classrooms WHERE id=?", arrayOf(classroomId.toString())).use { c ->
+                require(c.moveToFirst()) { "Turma não encontrada." }
+                if ((c.getInt(0) == 1) == archived) { db.setTransactionSuccessful(); return }
+            }
+            if (!archived) {
+                db.rawQuery("SELECT COUNT(*) FROM classrooms WHERE archived=0", null).use { c ->
+                    c.moveToFirst()
+                    require(c.getInt(0) < 2) { "O plano gratuito permite até 2 turmas ativas. Arquive outra turma para restaurar esta." }
+                }
+            }
+            require(db.update("classrooms", values("archived" to archived), "id=?", arrayOf(classroomId.toString())) == 1)
+            db.setTransactionSuccessful()
         } finally { db.endTransaction() }
     }
 
@@ -144,11 +165,11 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun saveLesson(classroomId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {
-    require(title.isNotBlank() && subject.isNotBlank() && objective.isNotBlank()) { "Preencha o título, a disciplina e o objetivo." }
-    LocalDate.parse(date)
-    LocalTime.parse(time)
-    writableDatabase.insertOrThrow("lessons", null, values("classroom_id" to classroomId, "title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()))
-}
+        require(title.isNotBlank() && subject.isNotBlank() && objective.isNotBlank()) { "Preencha o título, a disciplina e o objetivo." }
+        LocalDate.parse(date)
+        LocalTime.parse(time)
+        writableDatabase.insertOrThrow("lessons", null, values("classroom_id" to classroomId, "title" to title.trim(), "subject" to subject.trim(), "day" to date, "time" to time, "objective" to objective.trim(), "content" to content.trim(), "method" to method.trim()))
+    }
 
     /** Edits only a plan belonging to the selected classroom; keeps its ID and other records untouched. */
     fun updateLesson(classroomId: Long, lessonId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {
@@ -187,8 +208,6 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     fun addObservation(classroomId: Long, studentId: Long?, kind: String, body: String, shareApproved: Boolean) {
         require(body.trim().length >= 5) { "Descreva a observação com ao menos 5 caracteres." }
         require(kind in listOf("Comportamento", "Participação", "Aprendizagem", "Outro")) { "Tipo de observação inválido." }
-        // A SQLite foreign key proves that a student exists but NOT that the student
-        // belongs to this classroom. Prevent cross-class links when creating notes.
         if (studentId != null) {
             readableDatabase.rawQuery("SELECT 1 FROM students WHERE id=? AND classroom_id=?", arrayOf(studentId.toString(), classroomId.toString())).use { cursor ->
                 require(cursor.moveToFirst()) { "Aluno não pertence a esta turma." }
@@ -241,18 +260,13 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     /** Renames the app catalog entry only; the original SAF document is never modified. */
     fun renameFile(fileId: Long, name: String) {
         require(name.trim().isNotEmpty() && name.trim().length <= 180) { "Informe um nome de arquivo válido (até 180 caracteres)." }
-        val updated = writableDatabase.update("saved_files", values("name" to name.trim()), "id=?", arrayOf(fileId.toString()))
-        require(updated == 1) { "Arquivo não encontrado." }
+        val updated = writableDatabase.update("saved_files", values("name" to name.trim()), "id=? AND trashed_at IS NULL", arrayOf(fileId.toString()))
+        require(updated == 1) { "Arquivo não encontrado ou está na lixeira." }
     }
 
-    /** Removes only this local reference; does not delete an original document. */
-    fun removeFile(fileId: Long) {
-        val deleted = writableDatabase.delete("saved_files", "id=?", arrayOf(fileId.toString()))
-        require(deleted == 1) { "Arquivo não encontrado." }
-    }
+    /** Former remove action is now reversible; the actual SAF source is never deleted. */
+    fun removeFile(fileId: Long) = trashFile(fileId)
 
-    fun addFile(name: String, uri: String) {
-        require(name.isNotBlank() && uri.startsWith("content://")) { "Arquivo inválido." }
-        writableDatabase.insertWithOnConflict("saved_files", null, values("name" to name, "uri" to uri), SQLiteDatabase.CONFLICT_IGNORE)
-    }
+    /** Re-selecting a URI revives trashed references and confirms access without losing metadata. */
+    fun addFile(name: String, uri: String): Long = FileImportPolicy.importReference(writableDatabase, name, uri)
 }

@@ -75,8 +75,25 @@ def audit(root: Path) -> list[str]:
             if re.search(r"(?m)^\s+contents:\s*write\b", source):
                 problems.append(f"{workflow.name}: auto-write access prohibited for quality agents")
         ci = read(".github/workflows/ci.yml")
-        if "app/build/outputs/apk/debug/app-debug.apk" in ci or "Upload owner-requested debug preview" in ci:
-            problems.append("CI still distributes a preview APK despite owner's postponement")
+        # The owner reversed the previous postponement specifically for a disposable
+        # PR #13 DEBUG build. Reject all unscoped distribution, production binaries,
+        # missing test gate, or long-lived previews. This is not a release approval.
+        distributes = "app/build/outputs/apk/debug/app-debug.apk" in ci or "Upload owner-requested debug preview" in ci
+        if distributes:
+            required = (
+                "github.event_name == 'pull_request' && github.event.pull_request.number == 13",
+                "name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}",
+                "uses: actions/upload-artifact@v4",
+                "retention-days: 3",
+                "test -s \"$apk\"",
+                'test "$(git rev-parse HEAD)" = "$head_sha"',
+                ":app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest",
+                "if-no-files-found: error",
+            )
+            if not all(fragment in ci for fragment in required):
+                problems.append("CI distributes a preview APK without scoped owner authorization and quality gates")
+            if any(fragment in ci for fragment in ("app-release.apk", "app-release.aab", "retention-days: 90")):
+                problems.append("CI preview must never distribute release binaries or long-lived artifacts")
         guard = read(".github/workflows/agent-quality.yml")
         if "python3 tools/agent_quality.py" not in guard:
             problems.append("Quality workflow does not run the deterministic audit")
