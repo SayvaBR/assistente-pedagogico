@@ -90,7 +90,12 @@ object LessonStatusV8 {
                 LessonStatus.ARCHIVED -> target == previous // Restore exactly the pre-archive state.
             }
             require(allowed) { "Transição de ${current.label} para ${target.label} não permitida." }
-            if (target == LessonStatus.READY || target == LessonStatus.COMPLETED) assertReady(db, classroomId, lessonId)
+            if (target == LessonStatus.READY || target == LessonStatus.COMPLETED) {
+                assertReady(db, classroomId, lessonId)
+                require(!PlanningScheduleConflicts.appointmentBlocksLesson(db, classroomId, lessonId)) {
+                    "Há um compromisso no horário desta aula. Ajuste o horário antes de confirmar o plano."
+                }
+            }
             val values = ContentValues().apply {
                 put("pedagogical_status", target.value)
                 put("archived", if (target == LessonStatus.ARCHIVED) 1 else 0)

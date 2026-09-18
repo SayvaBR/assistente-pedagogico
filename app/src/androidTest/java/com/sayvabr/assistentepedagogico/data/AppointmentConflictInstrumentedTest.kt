@@ -22,6 +22,10 @@ class AppointmentConflictInstrumentedTest {
         db.execSQL("INSERT INTO classrooms(id,archived) VALUES (1,0),(2,0),(3,1)")
         db.execSQL("CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, day TEXT NOT NULL, time TEXT NOT NULL)")
         AppointmentV5.migrate(db)
+        // Production always has lessons; include its planning columns in this isolated fixture.
+        db.execSQL("""CREATE TABLE lessons (id INTEGER PRIMARY KEY, classroom_id INTEGER NOT NULL REFERENCES classrooms(id),
+            day TEXT NOT NULL, time TEXT NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 50,
+            archived INTEGER NOT NULL DEFAULT 0, pedagogical_status TEXT NOT NULL DEFAULT 'draft')""")
     }
 
     @After fun cleanup() { db.close() }

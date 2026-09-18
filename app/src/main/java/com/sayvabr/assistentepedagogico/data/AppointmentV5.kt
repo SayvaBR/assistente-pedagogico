@@ -88,6 +88,9 @@ object AppointmentV5 {
         return try {
             requireActiveClass(db, valid.classroomId)
             require(!hasConflict(db, valid)) { "Já existe um compromisso nesse horário para a turma." }
+            require(!PlanningScheduleConflicts.lessonBlocksAppointment(db, valid)) {
+                "Já existe uma aula pronta ou concluída nesse horário para a turma."
+            }
             val id = db.insertOrThrow("appointments", null, values(valid))
             db.setTransactionSuccessful()
             id
@@ -103,6 +106,9 @@ object AppointmentV5 {
                 require(c.moveToFirst()) { "Compromisso não encontrado." }
             }
             require(!hasConflict(db, valid, excludingId = id)) { "Já existe um compromisso nesse horário para a turma." }
+            require(!PlanningScheduleConflicts.lessonBlocksAppointment(db, valid)) {
+                "Já existe uma aula pronta ou concluída nesse horário para a turma."
+            }
             require(db.update("appointments", values(valid), "id=?", arrayOf(id.toString())) == 1) {
                 "Compromisso não encontrado."
             }
