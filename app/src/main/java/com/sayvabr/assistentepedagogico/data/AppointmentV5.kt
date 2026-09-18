@@ -56,7 +56,8 @@ object AppointmentV5 {
     }
 
     /** Half-open intervals: [start, end). Different classes may schedule in parallel, but
-     * a commitment without a classroom blocks all classes on the same day.
+     * a commitment without a classroom blocks all classes on the same day. Legacy point
+     * records with unknown duration must never reserve a fabricated time interval.
      */
     fun hasConflict(db: SQLiteDatabase, input: Input, excludingId: Long? = null): Boolean {
         val value = validated(input)
@@ -69,7 +70,7 @@ object AppointmentV5 {
             args += excludingId.toString()
             " AND id<>?"
         }
-        val sql = "SELECT 1 FROM appointments WHERE day=? AND time < ? AND end_time > ? AND $classroomClause$excludeClause LIMIT 1"
+        val sql = "SELECT 1 FROM appointments WHERE day=? AND time < ? AND end_time > ? AND end_time > time AND $classroomClause$excludeClause LIMIT 1"
         db.rawQuery(sql, args.toTypedArray()).use { return it.moveToFirst() }
     }
 
