@@ -259,19 +259,19 @@ fun TeacherApp(store: TeacherStore) {
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { requestNavigate(it) },
                         openLesson = { lessonId -> selectedLesson = lessonId; requestNavigate("editLesson") },
                         restoreLesson = { lesson -> commit("planning") { store.setLessonArchived(lesson.classroomId, lesson.id, false) } })
-                    "newLesson" -> if (currentClass != null) LessonForm(currentClass, selectedDay, { requestBack() },
-                        { title, subject, day, time, objective, content, method ->
-                            commit("planning", onSuccess = { selectedDay = day }) {
-                                store.saveLesson(currentClass.id, title, subject, day, time, objective, content, method)
-                            }
-                        }, onDirty = { formDirty = true })
+                    "newLesson" -> if (currentClass != null) LessonEditorV6(
+                        classroom = currentClass, initialDay = selectedDay, back = { requestBack() },
+                        save = { input -> commit("planning", onSuccess = { selectedDay = input.day }) {
+                            store.saveLesson(input, currentClass.id)
+                        } }, onDirty = { formDirty = true })
                     "editLesson" -> snapshot.lessons.firstOrNull { it.id == selectedLesson && !it.archived }?.let { lesson ->
                         snapshot.classrooms.firstOrNull { it.id == lesson.classroomId && !it.archived }?.let { lessonClass ->
-                            LessonForm(lessonClass, lesson.date, { requestBack() }, { title, subject, day, time, objective, content, method ->
-                                commit("planning", onSuccess = { selectedDay = day }) {
-                                    store.updateLesson(lessonClass.id, lesson.id, title, subject, day, time, objective, content, method)
-                                }
-                            }, initial = lesson, archive = { commit("planning") { store.setLessonArchived(lessonClass.id, lesson.id, true) } },
+                            LessonEditorV6(
+                                classroom = lessonClass, initialDay = lesson.date, initial = lesson, back = { requestBack() },
+                                save = { input -> commit("planning", onSuccess = { selectedDay = input.day }) {
+                                    store.updateLesson(lessonClass.id, lesson.id, input)
+                                } },
+                                archive = { commit("planning") { store.setLessonArchived(lessonClass.id, lesson.id, true) } },
                                 onDirty = { formDirty = true })
                         }
                     } ?: Panel { Text("Plano indisponível. Retorne ao Planejamento.", color = ink); PrimaryButton("Voltar ao planejamento") { navigate("planning", root = true) } }
