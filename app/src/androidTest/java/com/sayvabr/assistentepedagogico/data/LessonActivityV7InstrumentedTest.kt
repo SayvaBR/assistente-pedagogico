@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Before
@@ -13,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
+/** Uses only a uniquely named synthetic database inside an isolated test application's cache. */
 @RunWith(AndroidJUnit4::class)
 class LessonActivityV7InstrumentedTest {
     private lateinit var file: File
@@ -23,10 +25,10 @@ class LessonActivityV7InstrumentedTest {
         file = File(context.cacheDir, "activity-v7-${System.nanoTime()}.db")
         db = SQLiteDatabase.openOrCreateDatabase(file, null)
         db.setForeignKeyConstraintsEnabled(true)
-        db.execSQL("CREATE TABLE classrooms (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE lessons (id INTEGER PRIMARY KEY, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE)")
+        db.execSQL("CREATE TABLE classrooms (id INTEGER PRIMARY KEY, name TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0)")
+        db.execSQL("CREATE TABLE lessons (id INTEGER PRIMARY KEY, classroom_id INTEGER NOT NULL REFERENCES classrooms(id) ON DELETE CASCADE, archived INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("INSERT INTO classrooms(id,name) VALUES (1,'Turma Azul'),(2,'Turma Branca')")
-        db.execSQL("INSERT INTO lessons(id,classroom_id) VALUES (10,1),(20,2)")
+        db.execSQL("INSERT INTO lessons(id,classroom_id) VALUES (10,1),(11,1),(20,2)")
         LessonActivityV7.migrate(db)
     }
 
@@ -68,5 +70,48 @@ class LessonActivityV7InstrumentedTest {
         assertThrows(IllegalArgumentException::class.java) {
             LessonActivityV7.validated(LessonActivityV7.Input(1, 10, "Teste", "x", 20))
         }
+    }
+
+    @Test fun duplicate_createsIndependentCopyAndCanRelinkWithinSameClass() {
+        val originalId = LessonActivityV7.create(db, LessonActivityV7.Input(1, 10, "Leitura guiada", "Ler e registrar as hipóteses.", 25))
+        val copyId = LessonActivityV7.duplicate(db, 1, originalId, targetLessonId = 11)
+        assertNotEquals(originalId, copyId)
+        val original = LessonActivityV7.list(db, 1, 10).single()
+        val copy = LessonActivityV7.list(db, 1, 11).single()
+        assertEquals(originalId, original.id)
+        assertEquals(copyId, copy.id)
+        assertEquals(original.title, copy.title)
+        assertEquals(original.instructions, copy.instructions)
+        assertEquals(original.durationMinutes, copy.durationMinutes)
+        LessonActivityV7.update(db, copyId, LessonActivityV7.Input(1, 11, "Versão revisada", "Adaptar as perguntas para outra aula.", 30))
+        assertEquals("Leitura guiada", LessonActivityV7.list(db, 1, 10).single().title)
+        assertEquals("Versão revisada", LessonActivityV7.list(db, 1, 11).single().title)
+    }
+
+    @Test fun duplicate_rejectsForeignSourceOrForeignTargetWithoutPartialInsert() {
+        val originalId = LessonActivityV7.create(db, LessonActivityV7.Input(1, 10, "Leitura guiada", "Ler e registrar as hipóteses.", 25))
+        assertThrows(IllegalArgumentException::class.java) { LessonActivityV7.duplicate(db, 2, originalId) }
+        assertThrows(IllegalArgumentException::class.java) { LessonActivityV7.duplicate(db, 1, originalId, targetLessonId = 20) }
+        assertEquals(1, LessonActivityV7.list(db, 1).size)
+        assertEquals(0, LessonActivityV7.list(db, 2).size)
+    }
+
+    @Test fun archivedClassOrLesson_cannotReceiveNewActivitiesOrCopies() {
+        val originalId = LessonActivityV7.create(db, LessonActivityV7.Input(1, 10, "Leitura guiada", "Ler e registrar as hipóteses.", 25))
+        db.execSQL("UPDATE lessons SET archived=1 WHERE id=11")
+        assertThrows(IllegalArgumentException::class.java) {
+            LessonActivityV7.create(db, LessonActivityV7.Input(1, 11, "Plano arquivado", "Não permitir vínculo em plano arquivado.", 25))
+        }
+        assertThrows(IllegalArgumentException::class.java) { LessonActivityV7.duplicate(db, 1, originalId, targetLessonId = 11) }
+        db.execSQL("UPDATE classrooms SET archived=1 WHERE id=1")
+        assertThrows(IllegalArgumentException::class.java) {
+            LessonActivityV7.create(db, LessonActivityV7.Input(1, null, "Turma arquivada", "Não permitir novos registros nesta turma.", 25))
+        }
+        assertThrows(IllegalArgumentException::class.java) { LessonActivityV7.duplicate(db, 1, originalId) }
+        assertThrows(IllegalArgumentException::class.java) {
+            LessonActivityV7.update(db, originalId, LessonActivityV7.Input(1, 10, "Alteração indevida", "Não editar atividades nesta turma.", 25))
+        }
+        assertEquals(1, LessonActivityV7.list(db, 1).size)
+        assertEquals("Leitura guiada", LessonActivityV7.list(db, 1).single().title)
     }
 }
