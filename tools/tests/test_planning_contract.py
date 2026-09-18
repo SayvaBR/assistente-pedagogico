@@ -10,6 +10,7 @@ class PlanningContractTest(unittest.TestCase):
     def test_both_calendar_screens_are_wired_to_real_routes(self):
         app = (UI / 'TeacherApp.kt').read_text(encoding='utf-8')
         workspace = (UI / 'PlanningWorkspace.kt').read_text(encoding='utf-8')
+        kit = (UI / 'PlanningVisualKit.kt').read_text(encoding='utf-8')
         self.assertIn('PlanningWorkspace(data, classroom, day, onDay, go, openLesson, restoreLesson)', app)
         self.assertIn('PlanningAgendaScreen(data, day, onDay, add, open, openLesson)', app)
         self.assertIn('selectedLesson = lessonId; requestNavigate("editLesson")', app)
@@ -18,11 +19,14 @@ class PlanningContractTest(unittest.TestCase):
         self.assertIn('data.lessons.filter', workspace)
         self.assertIn('data.appointments.filter', workspace)
         self.assertIn('MonthGrid(focus, lessonDays, appointmentDays, onDay)', workspace)
-        # Both lesson lists and Agenda must consult one day/week/month policy, not a day-only fallback.
         self.assertGreaterEqual(workspace.count('PlanningCalendarPolicy.inPeriod('), 3)
-        self.assertIn('"Mês" -> "Aulas de', workspace)
+        # The monthly list uses the whole month for discovery, but highlights the selected day.
+        self.assertIn('"Mês" -> if (showWholeMonth) "Aulas do mês"', workspace)
+        self.assertIn('inPeriod.filter { it.date == day }', workspace)
         self.assertIn('"Mês" -> "Agenda de', workspace)
         self.assertIn('shownAppointments.forEach', workspace)
+        self.assertIn('PlanningLessonTile(lesson', workspace)
+        self.assertIn('onOpen: () -> Unit', kit)
         self.assertNotIn('1000273178', workspace)  # Reference image is design input, never demo data.
 
     def test_old_patch_workflow_removed_and_date_rules_have_tests(self):
