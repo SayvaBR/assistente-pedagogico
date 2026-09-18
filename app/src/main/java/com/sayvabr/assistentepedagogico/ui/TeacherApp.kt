@@ -259,6 +259,13 @@ fun TeacherApp(store: TeacherStore) {
                     "planning" -> PlanningScreen(snapshot, currentClass, selectedDay, { selectedDay = it }, { requestNavigate(it) },
                         openLesson = { lessonId -> selectedLesson = lessonId; requestNavigate("editLesson") },
                         restoreLesson = { lesson -> commit("planning") { store.setLessonArchived(lesson.classroomId, lesson.id, false) } })
+                    "activities" -> PlanningActivitiesScreen(
+                        store = store,
+                        classroom = currentClass,
+                        lessons = snapshot.lessons,
+                        back = { requestBack() },
+                        onDirty = { formDirty = it },
+                    )
                     "newLesson" -> if (currentClass != null) LessonEditorV6(
                         classroom = currentClass, initialDay = selectedDay, back = { requestBack() },
                         save = { input -> commit("planning", onSuccess = { selectedDay = input.day }) {

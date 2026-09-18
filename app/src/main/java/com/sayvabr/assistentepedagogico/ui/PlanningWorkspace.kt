@@ -231,6 +231,8 @@ fun PlanningWorkspace(
         ApRaisedButton("Adicionar aula", onClick = { go("newLesson") }, glyph = ApGlyphKind.PLUS)
         Spacer(Modifier.height(9.dp))
         ApRaisedButton("Ver compromissos", onClick = { go("agenda") }, glyph = ApGlyphKind.CALENDAR, secondary = true)
+        Spacer(Modifier.height(9.dp))
+        ApRaisedButton("Atividades da turma", onClick = { go("activities") }, glyph = ApGlyphKind.DOCUMENT, secondary = true)
     }
 }
 
