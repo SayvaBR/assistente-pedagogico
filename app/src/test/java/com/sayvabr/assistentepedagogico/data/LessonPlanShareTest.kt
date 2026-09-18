@@ -1,5 +1,6 @@
 package com.sayvabr.assistentepedagogico.data
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -62,5 +63,21 @@ class LessonPlanShareTest {
         assertThrows(IllegalArgumentException::class.java) {
             LessonPlanShare.asPlainText(input(), "   ")
         }
+    }
+
+    @Test fun personalizedExportUsesExactOrderAndNeverFabricatesBnccText() {
+        val layout = PlanComposition.standard()
+            .move("bncc", -1)
+            .add(PlanBlock("school_note", PlanBlockKind.CUSTOM, "Anotações da escola", "Texto livre fictício"), "identification")
+            .move("school_note", -1)
+        val text = LessonPlanShare.asPlainText(input(), "Turma fictícia", layout)
+        assertTrue(text.indexOf("Anotações da escola") < text.indexOf("Identificação"))
+        assertTrue(text.indexOf("Identificação") < text.indexOf("Habilidades BNCC"))
+        assertTrue(text.contains("Texto livre fictício"))
+        assertTrue(text.contains("Códigos BNCC informados (conferir com a fonte oficial)"))
+        assertFalse(text.contains("Texto oficial gerado"))
+        val without = layout.remove("bncc")
+        assertFalse(LessonPlanShare.asPlainText(input(), "Turma fictícia", without).contains("EF05CI02"))
+        assertEquals(layout.blocks.map { it.id }, PlanLayoutV9.decode(PlanLayoutV9.encode(layout)).blocks.map { it.id })
     }
 }
