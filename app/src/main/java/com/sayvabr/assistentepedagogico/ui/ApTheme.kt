@@ -20,13 +20,29 @@ object ApColors {
     val Canvas = ApPalette.Sky
 }
 
+/**
+ * Every Material 3 semantic color role must honor the product palette.
+ * Unspecified secondary/tertiary containers fall back to lavender in the stock
+ * light theme (observed on Files filter chips in real Android screenshots).
+ */
 private val apColorScheme = lightColorScheme(
     primary = ApPalette.Primary,
     onPrimary = ApPalette.White,
+    primaryContainer = ApPalette.LightSurface,
+    onPrimaryContainer = ApPalette.Navy,
+    secondary = ApPalette.Pressed,
+    onSecondary = ApPalette.White,
+    secondaryContainer = ApPalette.LightSurface,
+    onSecondaryContainer = ApPalette.Navy,
+    tertiary = ApPalette.Primary,
+    onTertiary = ApPalette.White,
+    tertiaryContainer = ApPalette.LightSurface,
+    onTertiaryContainer = ApPalette.Navy,
     background = ApPalette.Sky,
     onBackground = ApPalette.Navy,
     surface = ApPalette.White,
     onSurface = ApPalette.Navy,
+    surfaceTint = ApPalette.Primary,
     outline = ApPalette.Outline,
     surfaceVariant = ApPalette.LightSurface,
     onSurfaceVariant = ApPalette.Navy,
