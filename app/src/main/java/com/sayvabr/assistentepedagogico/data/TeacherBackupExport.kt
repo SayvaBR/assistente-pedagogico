@@ -30,5 +30,9 @@ fun TeacherStore.exportBackupPayload(): String {
             archiveOrigins[cursor.getLong(0)] = previous
         }
     }
-    return TeacherBackupCodec.encode(snapshot.copy(files = fullCatalog), activities, archiveOrigins)
+    val layouts = PlanLayoutV9.allLayouts(readableDatabase)
+    val templates = planTemplates().map { (id, template) ->
+        Triple(id, template.name, PlanLayoutV9.encode(template.instantiate()))
+    }
+    return TeacherBackupCodec.encode(snapshot.copy(files = fullCatalog), activities, archiveOrigins, layouts, templates)
 }
