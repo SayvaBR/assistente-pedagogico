@@ -2,6 +2,7 @@ package com.sayvabr.assistentepedagogico.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LessonPlanV6Test {
@@ -32,7 +33,39 @@ class LessonPlanV6Test {
 
     @Test fun rejectsMomentsLongerThanLesson() {
         assertThrows(IllegalArgumentException::class.java) {
-            LessonPlanV6.validated(base().copy(openingMinutes = 20, developmentMinutes = 30, closingMinutes = 10))
+            LessonPlanV6.validated(base().copy(
+                opening = "Introdução", openingMinutes = 20,
+                development = "Leitura", developmentMinutes = 30,
+                closing = "Síntese", closingMinutes = 10,
+            ))
+        }
+    }
+
+    @Test fun rejectsDescriptionWithoutDuration() {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            LessonPlanV6.validated(base().copy(opening = "Retomar a aula anterior", openingMinutes = 0))
+        }
+        assertTrue(exception.message.orEmpty().contains("abertura"))
+    }
+
+    @Test fun rejectsDurationWithoutDescription() {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            LessonPlanV6.validated(base().copy(development = "   ", developmentMinutes = 30))
+        }
+        assertTrue(exception.message.orEmpty().contains("desenvolvimento"))
+    }
+
+    @Test fun acceptsOmittedMomentsForLegacyAndPartialPlans() {
+        val plan = LessonPlanV6.validated(base())
+        assertEquals(0, plan.openingMinutes + plan.developmentMinutes + plan.closingMinutes)
+    }
+
+    @Test fun rejectsHugeDurationBeforeSumOverflow() {
+        assertThrows(IllegalArgumentException::class.java) {
+            LessonPlanV6.validated(base().copy(
+                opening = "Início", openingMinutes = Int.MAX_VALUE,
+                development = "Parte principal", developmentMinutes = Int.MAX_VALUE,
+            ))
         }
     }
 
