@@ -9,6 +9,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +53,7 @@ fun AppointmentEditorV5(
     }
     var type by rememberSaveable(initial?.id) { mutableStateOf(initial?.type ?: "Outro") }
     var classroomId by rememberSaveable(initial?.id) { mutableStateOf(initial?.classroomId ?: -1L) }
+    var fieldsDirty by rememberSaveable(initial?.id) { mutableStateOf(false) }
     var typesExpanded by remember { mutableStateOf(false) }
     var classesExpanded by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -59,11 +61,21 @@ fun AppointmentEditorV5(
     val availableClasses = classes.filter { !it.archived }
     val selectedClass = availableClasses.firstOrNull { it.id == classroomId }
 
+    // TeacherApp is reconstructed on rotation and resets its in-memory guard. The form's
+    // saveable dirty flag must re-register after its restored fields are composed.
+    LaunchedEffect(fieldsDirty) {
+        if (fieldsDirty) onDirty()
+    }
+
+    fun markChanged() {
+        fieldsDirty = true
+        validationError = null
+        onDirty()
+    }
     fun update(previous: String, next: String, apply: (String) -> Unit) {
         if (previous != next) {
             apply(next)
-            validationError = null
-            onDirty()
+            markChanged()
         }
     }
 
@@ -109,12 +121,12 @@ fun AppointmentEditorV5(
                 }
                 DropdownMenu(expanded = classesExpanded, onDismissRequest = { classesExpanded = false }) {
                     DropdownMenuItem(text = { Text("Geral / sem turma") }, onClick = {
-                        if (classroomId != -1L) { classroomId = -1L; validationError = null; onDirty() }
+                        if (classroomId != -1L) { classroomId = -1L; markChanged() }
                         classesExpanded = false
                     })
                     availableClasses.forEach { classroom ->
                         DropdownMenuItem(text = { Text("${classroom.name} · turma ${classroom.id}") }, onClick = {
-                            if (classroomId != classroom.id) { classroomId = classroom.id; validationError = null; onDirty() }
+                            if (classroomId != classroom.id) { classroomId = classroom.id; markChanged() }
                             classesExpanded = false
                         })
                     }
