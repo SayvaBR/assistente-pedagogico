@@ -31,6 +31,8 @@ object LessonPlanV6 {
         val adaptations: String = "",
         /** UI command routed by the Activity's existing save/commit callback; never stored as lesson content. */
         val statusTransition: LessonStatus? = null,
+        /** Optional v9 presentation; canonical fields remain stored once in lessons. */
+        val composition: PlanComposition? = null,
     )
 
     /** The editor and persistence validation share the same calculation. No silent midnight wrap. */
