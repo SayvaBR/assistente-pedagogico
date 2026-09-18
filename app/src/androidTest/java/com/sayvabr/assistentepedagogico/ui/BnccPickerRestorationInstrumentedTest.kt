@@ -32,12 +32,13 @@ class BnccPickerRestorationInstrumentedTest {
             }
         }
         compose.onAllNodes(hasSetTextAction())[0].performTextInput("EF05MA07")
-        compose.onNodeWithText("EF05MA07", substring = true).performClick()
+        // The first match is the search input; the last is the unique result row.
+        compose.onAllNodesWithText("EF05MA07", substring = true).onLast().performClick()
         compose.onNodeWithText("1 selecionada(s)", substring = true).assertExists()
         assertEquals(null, confirmed)
 
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("EF05MA07", substring = true).assertExists()
+        compose.onAllNodesWithText("EF05MA07", substring = true).onLast().assertExists()
         compose.onNodeWithText("1 selecionada(s)", substring = true).assertExists()
         assertEquals(null, confirmed)
         compose.onNodeWithText("Usar selecionadas").performClick()
@@ -49,7 +50,8 @@ class BnccPickerRestorationInstrumentedTest {
         val catalog = BnccCatalog.load(context)
         compose.setContent { ApTheme { BnccPicker(catalog, emptyList(), {}, {}) } }
         compose.onNodeWithText("Fundamental").performClick()
-        compose.onNodeWithText("Ano do Fundamental (1–9, opcional)").performTextInput("5")
+        // Query is input #0; the grade field appears as input #1 only in Fundamental.
+        compose.onAllNodes(hasSetTextAction())[1].performTextInput("5")
         compose.onNodeWithText("Computação").performClick()
         compose.onNodeWithText("0 selecionada(s) · 100 resultado(s) exibidos").assertExists()
     }
