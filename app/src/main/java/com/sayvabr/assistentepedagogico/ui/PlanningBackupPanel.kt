@@ -121,8 +121,9 @@ fun PlanningBackupPanel() {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Prévia do backup selecionado:")
                 Text("${summary.classrooms} turmas · ${summary.students} alunos · ${summary.lessons} planos")
-                Text("${summary.appointments} compromissos · ${summary.attendance} presenças")
-                Text("${summary.observations} observações · ${summary.files} referências de arquivos")
+                Text("${summary.activities} atividades · ${summary.appointments} compromissos")
+                Text("${summary.attendance} presenças · ${summary.observations} observações")
+                Text("${summary.files} referências de arquivos (sem os documentos originais)")
                 Spacer(Modifier.height(8.dp))
                 Text("Esta operação SUBSTITUI todos os registros atuais. Não combina bancos e não pode ser desfeita pelo aplicativo. Exporte um backup dos dados atuais antes de continuar.", fontWeight = FontWeight.Bold)
                 Text("Os PDFs originais não estão incluídos. Autorizações de acesso aos documentos precisarão ser renovadas.")
