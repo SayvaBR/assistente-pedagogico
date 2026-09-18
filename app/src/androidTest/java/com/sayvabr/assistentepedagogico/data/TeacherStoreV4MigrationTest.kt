@@ -53,14 +53,14 @@ class TeacherStoreV4MigrationTest {
     @Test fun migrationPreservesLegacyIdentityAllowsOrganizationAndReopensSafely() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(LessonActivityV7.VERSION, first.readableDatabase.version)
+        assertEquals(LessonStatusV8.VERSION, first.readableDatabase.version)
         assertEquals(listOf(14L, 13L), first.read().files.map { it.id })
         assertEquals("content://synthetic/a", first.read().files.single { it.id == 13L }.uri)
         val formerEvent = first.read().appointments.single()
         assertEquals(47L, formerEvent.id)
         assertEquals("Reunião anterior", formerEvent.title)
         assertEquals("08:00", formerEvent.time)
-        assertEquals("08:00", formerEvent.endTime) // Legacy duration was never recorded.
+        assertEquals("08:00", formerEvent.endTime)
         assertEquals("Outro", formerEvent.type)
         assertNull(formerEvent.classroomId)
         val folder = first.createFolder("Materiais")
@@ -72,7 +72,7 @@ class TeacherStoreV4MigrationTest {
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(LessonActivityV7.VERSION, reopened.readableDatabase.version)
+        assertEquals(LessonStatusV8.VERSION, reopened.readableDatabase.version)
         assertEquals(formerEvent, reopened.read().appointments.single())
         val trashed = reopened.libraryFiles().single { it.id == 13L }
         assertEquals(folder, trashed.folderId)
