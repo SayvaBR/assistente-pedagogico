@@ -11,6 +11,7 @@ object LessonPlanDuplication {
      * Copy a non-archived lesson belonging to an active classroom, preserving all pedagogical fields.
      * Activities linked to the original are copied and relinked to the new lesson in the same transaction.
      * A different date may be selected, but the original lesson and activities remain unchanged.
+     * A copy is always a draft: completion/readiness belongs to the original teaching event.
      */
     fun duplicate(db: SQLiteDatabase, classroomId: Long, lessonId: Long, targetDay: String? = null): Long {
         require(classroomId > 0 && lessonId > 0) { "Turma ou plano inválido." }
@@ -39,6 +40,8 @@ object LessonPlanDuplication {
                     put("title", "${source.getString(source.getColumnIndexOrThrow("title"))} (cópia)")
                     if (newDay != null) put("day", newDay)
                     put("archived", 0)
+                    put("pedagogical_status", LessonStatus.DRAFT.value)
+                    put("status_before_archive", LessonStatus.DRAFT.value)
                 }
             }
             val newId = db.insertOrThrow("lessons", null, values)
