@@ -3,6 +3,7 @@ package com.sayvabr.assistentepedagogico.data
 import android.database.sqlite.SQLiteDatabase
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 /** Additive lesson-plan evolution. Existing plans remain valid and are never rewritten during migration. */
 object LessonPlanV6 {
@@ -30,6 +31,18 @@ object LessonPlanV6 {
         val adaptations: String = "",
     )
 
+    /** The editor and persistence validation share the same calculation. No silent midnight wrap. */
+    fun endTime(time: String, durationMinutes: Int): String {
+        require(Regex("[0-9]{2}:[0-9]{2}").matches(time)) { "Informe o horário inicial no formato HH:MM." }
+        val start = runCatching { LocalTime.parse(time) }.getOrElse {
+            throw IllegalArgumentException("Informe um horário inicial válido.", it)
+        }
+        require(durationMinutes in 10..480) { "A duração deve ficar entre 10 minutos e 8 horas." }
+        val endMinutes = start.hour * 60 + start.minute + durationMinutes
+        require(endMinutes < 24 * 60) { "A aula terminaria após o fim do dia. Ajuste o início ou a duração." }
+        return LocalTime.of(endMinutes / 60, endMinutes % 60).format(DateTimeFormatter.ofPattern("HH:mm"))
+    }
+
     fun validated(input: Input): Input {
         val title = input.title.trim()
         val subject = input.subject.trim()
@@ -39,8 +52,7 @@ object LessonPlanV6 {
         require(title.length >= 3) { "Informe um título de aula com pelo menos 3 caracteres." }
         require(subject.isNotEmpty()) { "Informe o componente curricular." }
         LocalDate.parse(input.day)
-        LocalTime.parse(input.time)
-        require(input.durationMinutes in 10..480) { "A duração deve ficar entre 10 minutos e 8 horas." }
+        endTime(input.time, input.durationMinutes)
         require(objective.length >= 5) { "Descreva o objetivo geral da aula." }
         require(content.isNotEmpty()) { "Informe o conteúdo ou objeto de conhecimento." }
         require(method.isNotEmpty()) { "Informe a metodologia ou estratégia de ensino." }
