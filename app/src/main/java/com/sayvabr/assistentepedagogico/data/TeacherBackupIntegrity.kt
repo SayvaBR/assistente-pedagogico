@@ -39,8 +39,8 @@ internal object TeacherBackupIntegrity {
             }
         }
 
-        // A valid duration is not enough: importing a corrupted plan with impossible timings
-        // would otherwise persist an inconsistent pedagogical schedule in SQLite.
+        // Validate the same timing invariants as the editor BEFORE restoring the backup. An
+        // otherwise valid SQLite row may be impossible to edit or share once reloaded.
         val lessons = root.getJSONArray("lessons")
         for (index in 0 until lessons.length()) {
             val lesson = lessons.getJSONObject(index)
@@ -53,6 +53,23 @@ internal object TeacherBackupIntegrity {
             }
             require(opening + development + closing <= duration.toLong()) {
                 "A soma dos momentos ultrapassa a duração do plano no backup."
+            }
+            // The v1 envelope predates rich plans: missing descriptions and durations together
+            // remain valid, but a half-filled moment is not a meaningful pedagogical plan.
+            listOf(
+                "abertura" to ("opening" to opening),
+                "desenvolvimento" to ("development" to development),
+                "fechamento" to ("closing" to closing),
+            ).forEach { (label, fieldAndMinutes) ->
+                val (field, minutes) = fieldAndMinutes
+                require(lesson.optString(field, "").isBlank() == (minutes == 0L)) {
+                    "O momento de $label deve ter descrição e tempo juntos no backup."
+                }
+            }
+            // Old backups lack durationMinutes entirely and must retain their legacy schedule.
+            // New exports contain it, so enforce the editor's no-midnight-wrap policy for them.
+            if (lesson.has("durationMinutes") && !lesson.isNull("durationMinutes")) {
+                LessonPlanV6.endTime(lesson.getString("time"), duration)
             }
         }
 
