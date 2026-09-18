@@ -12,14 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.sayvabr.assistentepedagogico.data.BnccCatalog
-import com.sayvabr.assistentepedagogico.data.Classroom
-import com.sayvabr.assistentepedagogico.data.Lesson
-import com.sayvabr.assistentepedagogico.data.LessonPlanShare
-import com.sayvabr.assistentepedagogico.data.LessonPlanV6
-import com.sayvabr.assistentepedagogico.data.LessonStatus
+import com.sayvabr.assistentepedagogico.data.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/** Professional offline editor; transitions travel through the existing Activity-owned commit callback. */
+/** The real offline editor composes canonical fields in the order stored in SQLite v9. */
 @Composable
 fun LessonEditorV6(
     classroom: Classroom,
@@ -32,6 +30,8 @@ fun LessonEditorV6(
     onDirty: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val store = LocalTeacherStore.current
+    val scope = rememberCoroutineScope()
     val editable = initial == null || initial.status == LessonStatus.DRAFT
     var fieldsDirty by rememberSaveable(initial?.id) { mutableStateOf(false) }
     var title by rememberSaveable(initial?.id) { mutableStateOf(initial?.title.orEmpty()) }
@@ -53,18 +53,39 @@ fun LessonEditorV6(
     var closingMinutes by rememberSaveable(initial?.id) { mutableStateOf((initial?.closingMinutes ?: 0).toString()) }
     var assessment by rememberSaveable(initial?.id) { mutableStateOf(initial?.assessment.orEmpty()) }
     var adaptations by rememberSaveable(initial?.id) { mutableStateOf(initial?.adaptations.orEmpty()) }
+    var layoutJson by rememberSaveable(initial?.id) {
+        mutableStateOf(if (initial == null) PlanLayoutV9.encode(PlanComposition.standard()) else "")
+    }
+    var templates by remember { mutableStateOf(emptyList<Pair<Long, PlanTemplate>>()) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmArchive by remember { mutableStateOf(false) }
     var confirmDuplicate by remember { mutableStateOf(false) }
     var confirmStatus by remember { mutableStateOf<LessonStatus?>(null) }
     var showBnccPicker by rememberSaveable { mutableStateOf(false) }
     var catalogue by remember { mutableStateOf<BnccCatalog?>(null) }
-
-    // TeacherApp's transient discard flag is reset when an Activity is recreated. Preserve the
-    // editor flag and re-arm navigation protection after all saveable fields are restored.
-    LaunchedEffect(fieldsDirty) {
-        if (fieldsDirty) onDirty()
+    val layout = remember(layoutJson) {
+        if (layoutJson.isBlank()) PlanComposition.standard() else PlanLayoutV9.decode(layoutJson)
     }
+
+    LaunchedEffect(store, initial?.id) {
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                store.planTemplates() to initial?.let { store.lessonComposition(classroom.id, it.id) }
+            }
+            templates = loaded.first
+            // Rotation restores the user's unsaved layout; never overwrite it with the persisted layout.
+            if (layoutJson.isBlank() && loaded.second != null) layoutJson = PlanLayoutV9.encode(loaded.second!!)
+        } catch (e: Exception) { error = e.message ?: "Não foi possível carregar a estrutura do plano." }
+    }
+    LaunchedEffect(showBnccPicker) {
+        if (showBnccPicker && catalogue == null) {
+            runCatching { withContext(Dispatchers.IO) { BnccCatalog.load(context) } }
+                .onSuccess { catalogue = it }
+                .onFailure { error = "Catálogo BNCC offline indisponível: ${it.message ?: "verifique a instalação."}"; showBnccPicker = false }
+        }
+    }
+    // TeacherApp's transient discard flag resets on Activity recreation. Re-arm after restoration.
+    LaunchedEffect(fieldsDirty) { if (fieldsDirty) onDirty() }
 
     val predictedEnd = remember(time, duration) {
         runCatching { LessonPlanV6.endTime(time, duration.toIntOrNull() ?: 0) }.getOrNull()
@@ -80,8 +101,9 @@ fun LessonEditorV6(
         assessment, adaptations,
     )
 
-    /** Saving and sharing validate precisely the same current fields and BNCC selection. */
+    /** Saving and sharing validate the same canonical fields and selected BNCC codes. */
     fun validatedEditorInput(): LessonPlanV6.Input {
+        require(layoutJson.isNotBlank()) { "A estrutura do plano ainda não foi carregada." }
         val valid = LessonPlanV6.validated(editorInput())
         if (valid.bnccCodes.isNotBlank()) {
             val verified = catalogue ?: BnccCatalog.load(context)
@@ -96,22 +118,22 @@ fun LessonEditorV6(
     fun update(old: String, next: String, setter: (String) -> Unit) {
         if (editable && old != next) { setter(next); fieldsDirty = true; error = null; onDirty() }
     }
+    fun changeLayout(next: PlanComposition) {
+        if (editable && layoutJson.isNotBlank() && next != layout) {
+            runCatching { PlanLayoutV9.encode(next) }
+                .onSuccess { layoutJson = it; fieldsDirty = true; error = null; onDirty() }
+                .onFailure { error = it.message ?: "Não foi possível alterar a seção." }
+        }
+    }
     @Composable fun TextField(label: String, value: String, multiline: Boolean = false, setter: (String) -> Unit) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { update(value, it, setter) },
-            label = { Text(label) },
-            enabled = editable,
-            singleLine = !multiline,
-            minLines = if (multiline) 3 else 1,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        OutlinedTextField(value = value, onValueChange = { update(value, it, setter) },
+            label = { Text(label) }, enabled = editable, singleLine = !multiline,
+            minLines = if (multiline) 3 else 1, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(9.dp))
     }
     fun requestTransition(target: LessonStatus) {
-        if (fieldsDirty) {
-            error = "Salve ou descarte as alterações antes de mudar o estado. Nenhuma alteração foi perdida."
-        } else confirmStatus = target
+        if (fieldsDirty) error = "Salve ou descarte as alterações antes de mudar o estado. Nenhuma alteração foi perdida."
+        else confirmStatus = target
     }
 
     Column(Modifier.fillMaxWidth()) {
@@ -150,81 +172,105 @@ fun LessonEditorV6(
             }
         }
         Spacer(Modifier.height(12.dp))
-        ApCard {
-            ApEyebrow("Identificação", onPrimary = false)
-            TextField("Título da aula", title) { title = it }
-            TextField("Componente curricular / disciplina", subject) { subject = it }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(day, { update(day, it) { v -> day = v } }, label = { Text("Data") }, enabled = editable, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(time, { update(time, it) { v -> time = v } }, label = { Text("Início") }, enabled = editable, singleLine = true, modifier = Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(9.dp))
-            OutlinedTextField(duration, { update(duration, it) { v -> duration = v.filter(Char::isDigit) } }, label = { Text("Duração (min)") }, enabled = editable, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            Text(
-                if (predictedEnd != null) "Término previsto: $predictedEnd" else "Informe início (HH:MM) e duração válida para calcular o término.",
-                color = ApColors.Navy,
-                fontWeight = if (predictedEnd != null) FontWeight.Bold else FontWeight.Normal,
-            )
+        if (layoutJson.isBlank()) {
+            ApCard { Text("Carregando a organização do plano. Seus registros estão preservados.", color = ApColors.Navy) }
+        } else {
+            PlanComposerPanel(layout = layout, enabled = editable, templates = templates,
+                onChange = { changeLayout(it) },
+                onSaveTemplate = { name ->
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                store.createPlanTemplate(layout.saveAsTemplate(name))
+                                store.planTemplates()
+                            }
+                        }.onSuccess { templates = it; error = null }
+                            .onFailure { error = it.message ?: "Não foi possível salvar o modelo." }
+                    }
+                },
+                onRemoveTemplate = { id ->
+                    scope.launch {
+                        runCatching { withContext(Dispatchers.IO) { store.deletePlanTemplate(id); store.planTemplates() } }
+                            .onSuccess { templates = it; error = null }
+                            .onFailure { error = it.message ?: "Não foi possível excluir o modelo." }
+                    }
+                },
+                sectionContent = { block ->
+                    when (block.kind) {
+                        PlanBlockKind.IDENTIFICATION -> {
+                            TextField("Título da aula", title) { title = it }
+                            TextField("Componente curricular / disciplina", subject) { subject = it }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(day, { update(day, it) { v -> day = v } },
+                                    label = { Text("Data") }, enabled = editable, singleLine = true,
+                                    modifier = Modifier.weight(1f))
+                                OutlinedTextField(time, { update(time, it) { v -> time = v } },
+                                    label = { Text("Início") }, enabled = editable, singleLine = true,
+                                    modifier = Modifier.weight(1f))
+                            }
+                            Spacer(Modifier.height(9.dp))
+                            OutlinedTextField(duration, { update(duration, it) { v -> duration = v.filter(Char::isDigit) } },
+                                label = { Text("Duração (min)") }, enabled = editable, singleLine = true,
+                                modifier = Modifier.fillMaxWidth())
+                            Spacer(Modifier.height(8.dp))
+                            Text(if (predictedEnd != null) "Término previsto: $predictedEnd"
+                                else "Informe início (HH:MM) e duração válida para calcular o término.",
+                                color = ApColors.Navy, fontWeight = if (predictedEnd != null) FontWeight.Bold else FontWeight.Normal)
+                        }
+                        PlanBlockKind.OBJECTIVES -> {
+                            TextField("Objetivo geral", objective, true) { objective = it }
+                            TextField("Objetivos específicos (opcional)", specific, true) { specific = it }
+                        }
+                        PlanBlockKind.CONTENT -> TextField("Conteúdo / objeto de conhecimento", content, true) { content = it }
+                        PlanBlockKind.BNCC -> {
+                            OutlinedTextField(value = bncc, onValueChange = {}, readOnly = true,
+                                label = { Text("Habilidades BNCC selecionadas") }, minLines = 2,
+                                modifier = Modifier.fillMaxWidth())
+                            Spacer(Modifier.height(8.dp))
+                            if (editable) ApRaisedButton("Buscar e selecionar habilidades BNCC", onClick = {
+                                showBnccPicker = true
+                            }, glyph = ApGlyphKind.CHECK, secondary = true)
+                            Text("Catálogo offline de terceiros em auditoria contra os documentos oficiais da BNCC.", color = ApColors.Navy)
+                        }
+                        PlanBlockKind.CONTEXT -> TextField("Justificativa / contextualização (opcional)", justification, true) { justification = it }
+                        PlanBlockKind.METHODOLOGY -> TextField("Metodologia / estratégia", method, true) { method = it }
+                        PlanBlockKind.OPENING -> {
+                            TextField("Abertura", opening, true) { opening = it }
+                            TextField("Tempo da abertura (min)", openingMinutes) { openingMinutes = it.filter(Char::isDigit) }
+                        }
+                        PlanBlockKind.DEVELOPMENT -> {
+                            TextField("Desenvolvimento", development, true) { development = it }
+                            TextField("Tempo do desenvolvimento (min)", developmentMinutes) { developmentMinutes = it.filter(Char::isDigit) }
+                        }
+                        PlanBlockKind.CLOSING -> {
+                            TextField("Fechamento", closing, true) { closing = it }
+                            TextField("Tempo do fechamento (min)", closingMinutes) { closingMinutes = it.filter(Char::isDigit) }
+                        }
+                        PlanBlockKind.ASSESSMENT -> TextField("Avaliação / evidências de aprendizagem (opcional)", assessment, true) { assessment = it }
+                        PlanBlockKind.ADAPTATIONS -> TextField("Adaptações e acessibilidade (opcional)", adaptations, true) { adaptations = it }
+                        PlanBlockKind.RESOURCES -> Text("Para descrever recursos, adicione uma seção personalizada; este campo ainda não pertence ao registro canônico.", color = ApColors.Navy)
+                        PlanBlockKind.CUSTOM -> Unit // PlanComposerPanel renders the custom text directly.
+                    }
+                })
         }
         Spacer(Modifier.height(12.dp))
         ApCard {
-            ApEyebrow("O que vou ensinar", onPrimary = false)
-            TextField("Objetivo geral", objective, true) { objective = it }
-            TextField("Objetivos específicos (opcional)", specific, true) { specific = it }
-            TextField("Conteúdo / objeto de conhecimento", content, true) { content = it }
-            OutlinedTextField(
-                value = bncc,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Habilidades BNCC selecionadas") },
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            if (editable) ApRaisedButton("Buscar e selecionar habilidades BNCC", onClick = {
-                runCatching { catalogue ?: BnccCatalog.load(context) }
-                    .onSuccess { catalogue = it; error = null; showBnccPicker = true }
-                    .onFailure { error = "Catálogo BNCC offline indisponível: ${it.message ?: "verifique a instalação."}" }
-            }, glyph = ApGlyphKind.CHECK, secondary = true)
-            Text("Catálogo offline de terceiros em auditoria contra os documentos oficiais da BNCC.", color = ApColors.Navy)
-            Spacer(Modifier.height(9.dp))
-            TextField("Justificativa / contextualização (opcional)", justification, true) { justification = it }
-        }
-        Spacer(Modifier.height(12.dp))
-        ApCard {
-            ApEyebrow("Como vou dar a aula", onPrimary = false)
-            TextField("Metodologia / estratégia", method, true) { method = it }
-            TextField("Abertura", opening, true) { opening = it }
-            TextField("Tempo da abertura (min)", openingMinutes) { openingMinutes = it.filter(Char::isDigit) }
-            TextField("Desenvolvimento", development, true) { development = it }
-            TextField("Tempo do desenvolvimento (min)", developmentMinutes) { developmentMinutes = it.filter(Char::isDigit) }
-            TextField("Fechamento", closing, true) { closing = it }
-            TextField("Tempo do fechamento (min)", closingMinutes) { closingMinutes = it.filter(Char::isDigit) }
-            Text(
-                "Momentos distribuídos: $allocatedMinutes de $totalMinutes min" +
-                    if (allocatedMinutes > totalMinutes) " — ajuste os tempos antes de salvar." else "",
-                color = ApColors.Navy,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        ApCard {
-            ApEyebrow("Acompanhamento", onPrimary = false)
-            TextField("Avaliação / evidências de aprendizagem (opcional)", assessment, true) { assessment = it }
-            TextField("Adaptações e acessibilidade (opcional)", adaptations, true) { adaptations = it }
+            ApEyebrow("Concluir e compartilhar", onPrimary = false)
+            Text("Momentos distribuídos: $allocatedMinutes de $totalMinutes min" +
+                if (allocatedMinutes > totalMinutes) " — ajuste os tempos antes de salvar." else "",
+                color = ApColors.Navy, fontWeight = FontWeight.Bold)
             error?.let { Text(it, color = ApColors.Navy, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(10.dp))
             if (editable) {
                 ApRaisedButton(if (initial == null) "Salvar plano de aula" else "Salvar alterações", onClick = {
-                    runCatching { save(validatedEditorInput()) }
+                    runCatching { save(validatedEditorInput().copy(composition = layout)) }
                         .onFailure { error = it.message ?: "Revise os campos do plano." }
-                }, glyph = ApGlyphKind.CHECK)
+                }, glyph = ApGlyphKind.CHECK, enabled = layoutJson.isNotBlank())
                 Spacer(Modifier.height(10.dp))
             }
             ApRaisedButton("Compartilhar prévia do plano", onClick = {
                 runCatching {
-                    val preview = LessonPlanShare.asPlainText(validatedEditorInput(), classroom.name)
+                    val preview = LessonPlanShare.asPlainText(validatedEditorInput(), classroom.name, layout)
                     val send = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
                         putExtra(Intent.EXTRA_SUBJECT, "Plano de aula — ${title.trim()}")
@@ -233,8 +279,8 @@ fun LessonEditorV6(
                     context.startActivity(Intent.createChooser(send, "Compartilhar prévia do plano"))
                     error = null
                 }.onFailure { error = it.message ?: "Não foi possível compartilhar este plano." }
-            }, glyph = ApGlyphKind.DOCUMENT, secondary = true)
-            Text("A prévia contém os campos atuais. Compartilhar não salva alterações no aplicativo.", color = ApColors.Navy)
+            }, glyph = ApGlyphKind.DOCUMENT, secondary = true, enabled = layoutJson.isNotBlank())
+            Text("A prévia respeita a ordem das seções atuais. Compartilhar não salva alterações no aplicativo.", color = ApColors.Navy)
             if (duplicate != null) {
                 Spacer(Modifier.height(10.dp))
                 ApRaisedButton("Duplicar plano e atividades", onClick = { confirmDuplicate = true }, glyph = ApGlyphKind.PLUS, secondary = true)
@@ -247,14 +293,11 @@ fun LessonEditorV6(
     }
 
     if (showBnccPicker && catalogue != null && editable) BnccPicker(
-        catalog = requireNotNull(catalogue),
-        initialCodes = BnccCatalog.parseCodes(bncc),
+        catalog = requireNotNull(catalogue), initialCodes = BnccCatalog.parseCodes(bncc),
         onConfirm = { codes ->
             update(bncc, codes.joinToString(", ")) { bncc = it }
             showBnccPicker = false
-        },
-        onDismiss = { showBnccPicker = false },
-    )
+        }, onDismiss = { showBnccPicker = false })
 
     confirmStatus?.let { target -> AlertDialog(
         onDismissRequest = { confirmStatus = null },
@@ -265,20 +308,17 @@ fun LessonEditorV6(
             if (fieldsDirty) error = "Salve ou descarte as alterações antes de mudar o estado."
             else save(editorInput().copy(statusTransition = target))
         }) { Text("Confirmar") } },
-        dismissButton = { TextButton(onClick = { confirmStatus = null }) { Text("Cancelar") } },
-    ) }
+        dismissButton = { TextButton(onClick = { confirmStatus = null }) { Text("Cancelar") } }) }
     if (confirmArchive && archive != null) AlertDialog(
         onDismissRequest = { confirmArchive = false },
         title = { Text("Arquivar plano?") },
         text = { Text("O plano será preservado e poderá ser restaurado em Planejamento > Arquivados. Alterações ainda não salvas não serão incluídas.") },
         confirmButton = { TextButton(onClick = { confirmArchive = false; archive() }) { Text("Arquivar") } },
-        dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancelar") } },
-    )
+        dismissButton = { TextButton(onClick = { confirmArchive = false }) { Text("Cancelar") } })
     if (confirmDuplicate && duplicate != null) AlertDialog(
         onDismissRequest = { confirmDuplicate = false },
         title = { Text("Duplicar plano e atividades?") },
         text = { Text("Uma cópia independente do plano e de suas atividades vinculadas será criada na mesma turma. Alterações ainda não salvas nesta tela não serão copiadas.") },
         confirmButton = { TextButton(onClick = { confirmDuplicate = false; duplicate() }) { Text("Duplicar") } },
-        dismissButton = { TextButton(onClick = { confirmDuplicate = false }) { Text("Cancelar") } },
-    )
+        dismissButton = { TextButton(onClick = { confirmDuplicate = false }) { Text("Cancelar") } })
 }
