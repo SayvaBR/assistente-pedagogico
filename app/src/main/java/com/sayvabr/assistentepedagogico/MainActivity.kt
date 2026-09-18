@@ -17,16 +17,19 @@ import com.sayvabr.assistentepedagogico.ui.LocalTeacherStore
 import com.sayvabr.assistentepedagogico.ui.TeacherApp
 
 class MainActivity : ComponentActivity() {
-    private val store by lazy { TeacherStore(applicationContext) }
+    private val storeDelegate = lazy { TeacherStore(applicationContext) }
+    private val store by storeDelegate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Insets are consumed once at the root; bottom bar owns navigation-bars padding.
-        // The Activity owns the SQLiteOpenHelper. Nested Compose screens share it.
+        // Android 15/16 draw edge-to-edge by default. Consume the status-bar inset once
+        // at the activity root, instead of letting each screen paint beneath the clock.
+        // The bottom navigation already handles navigationBarsPadding in TeacherApp.
+        // imePadding keeps forms and their save actions above the software keyboard.
         setContent {
-            CompositionLocalProvider(LocalTeacherStore provides store) {
-                ApTheme {
-                    Box(Modifier.fillMaxSize().background(ApColors.Sky).statusBarsPadding().imePadding()) {
+            ApTheme {
+                Box(Modifier.fillMaxSize().background(ApColors.Sky).statusBarsPadding().imePadding()) {
+                    CompositionLocalProvider(LocalTeacherStore provides store) {
                         TeacherApp(store)
                     }
                 }
@@ -35,9 +38,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // A configuration change destroys this Activity as well: the replacement owns a new
-        // helper. Closing only on isFinishing leaks a connection after every rotation.
-        store.close()
+        // Rotation/configuration replacement owns a new helper, while this one must be closed.
+        // Lazy.isInitialized avoids creating a database connection solely to close it.
+        if (storeDelegate.isInitialized()) store.close()
         super.onDestroy()
     }
 }

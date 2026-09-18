@@ -11,6 +11,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          # CI must validate the PR branch HEAD, not an implicit test merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -25,5 +28,5 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # Build remains a required quality gate. No APK artifact is uploaded: owner
-      # explicitly postponed the next preview. Re-enable only on new instruction.
+      # Debug assembly remains an internal quality gate. Do not upload APK artifacts
+      # routinely; a preview must be explicitly re-enabled for a specific owner request.

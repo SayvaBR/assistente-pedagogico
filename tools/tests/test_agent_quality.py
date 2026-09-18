@@ -49,6 +49,30 @@ class AuditContractTest(unittest.TestCase):
         self.write(".github/workflows/ci.yml", "on:\n  pull_request:\npermissions:\n  contents: read\n# Upload owner-requested debug preview")
         self.assertTrue(any("distributes a preview APK" in issue for issue in audit(self.root)))
 
+    def test_allows_only_explicitly_scoped_debug_preview(self):
+        ci = "\n".join((
+            "on:", "  pull_request:", "permissions:", "  contents: read",
+            "- name: Build, unit test, lint and compile instrumentation tests",
+            "  run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest",
+            "- name: Check APK and record build provenance",
+            "  if: github.event_name == 'pull_request' && github.event.pull_request.number == 13",
+            "  run: |", "    apk=app/build/outputs/apk/debug/app-debug.apk",
+            "    test -s \"$apk\"",
+            '    test "$(git rev-parse HEAD)" = "$head_sha"',
+            "- name: Upload installable preview APK (3-day retention)",
+            "  if: github.event_name == 'pull_request' && github.event.pull_request.number == 13",
+            "  uses: actions/upload-artifact@v4",
+            "  with:",
+            "    name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}",
+            "    if-no-files-found: error", "    retention-days: 3",
+        ))
+        self.write(".github/workflows/ci.yml", ci)
+        self.assertEqual([], audit(self.root))
+        self.write(".github/workflows/ci.yml", ci.replace("github.event.pull_request.number == 13", "github.event.pull_request.number >= 1"))
+        self.assertTrue(any("scoped owner authorization" in issue for issue in audit(self.root)))
+        self.write(".github/workflows/ci.yml", ci.replace("retention-days: 3", "retention-days: 90"))
+        self.assertTrue(any("long-lived" in issue or "scoped owner authorization" in issue for issue in audit(self.root)))
+
 
 if __name__ == "__main__":
     unittest.main()
