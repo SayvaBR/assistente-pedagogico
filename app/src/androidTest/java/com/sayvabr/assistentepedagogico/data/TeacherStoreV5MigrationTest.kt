@@ -56,7 +56,7 @@ class TeacherStoreV5MigrationTest {
     @Test fun upgradePreservesIdsMetadataAndNewEventPersistsAfterReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(AppointmentV5.VERSION, first.readableDatabase.version)
+        assertEquals(LessonPlanV6.VERSION, first.readableDatabase.version)
         val legacy = first.read().appointments.single()
         assertEquals(41L, legacy.id)
         assertEquals("Reunião legado", legacy.title)
@@ -78,7 +78,7 @@ class TeacherStoreV5MigrationTest {
         first.close()
         store = TeacherStore(context)
         val second = requireNotNull(store)
-        assertEquals(AppointmentV5.VERSION, second.readableDatabase.version)
+        assertEquals(LessonPlanV6.VERSION, second.readableDatabase.version)
         assertEquals(legacy, second.read().appointments.single { it.id == 41L })
         assertEquals(created, second.read().appointments.single { it.id == createdId })
         assertEquals("content://synthetic/file", second.read().files.single().uri)
