@@ -7,11 +7,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.sayvabr.assistentepedagogico.data.LessonPlanV6
-import com.sayvabr.assistentepedagogico.data.PlanBlock
-import com.sayvabr.assistentepedagogico.data.PlanBlockKind
-import com.sayvabr.assistentepedagogico.data.PlanComposition
-import com.sayvabr.assistentepedagogico.data.TeacherStore
+import com.sayvabr.assistentepedagogico.data.*
 import java.time.LocalDate
 import org.junit.After
 import org.junit.Assert.assertEquals
