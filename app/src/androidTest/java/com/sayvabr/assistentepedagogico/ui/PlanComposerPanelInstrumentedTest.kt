@@ -35,28 +35,27 @@ class PlanComposerPanelInstrumentedTest {
         compose.setContent {
             ApTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    PlanComposerPanel(
-                        layout = current.value,
-                        enabled = true,
-                        templates = emptyList(),
+                    PlanComposerPanel(layout = current.value, enabled = true, templates = emptyList(),
                         onChange = { current.value = it },
                         onSaveTemplate = { saved = current.value.saveAsTemplate(it) },
-                        onRemoveTemplate = {},
-                        sectionContent = {},
-                    )
+                        onRemoveTemplate = {}, sectionContent = {})
                 }
             }
         }
         compose.onNodeWithText("Adicionar seção").performClick()
         compose.onNodeWithText("Seção personalizada").performClick()
-        compose.onNodeWithText("Seção 12 de 12").assertExists()
+        compose.onNodeWithText("ETAPA 12 / 12").assertExists()
         compose.onAllNodes(hasSetTextAction()).onLast().performTextInput("Conteúdo fictício que não pode ir ao modelo")
         compose.runOnIdle {
             assertEquals(PlanBlockKind.CUSTOM, current.value.blocks.last().kind)
             assertEquals("Conteúdo fictício que não pode ir ao modelo", current.value.blocks.last().body)
         }
-        compose.onAllNodesWithText("Subir").onLast().performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(PlanBlockKind.CUSTOM, current.value.blocks[current.value.blocks.lastIndex - 1].kind) }
+        compose.onAllNodesWithText("↑ Subir").onLast().performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals(PlanBlockKind.CUSTOM, current.value.blocks[current.value.blocks.lastIndex - 1].kind)
+        }
+        // Models are deliberately collapsed to keep the editor focused on the current lesson.
+        compose.onNodeWithText("Meus modelos").performScrollTo().performClick()
         compose.onNodeWithText("Nome do modelo da escola").performScrollTo().performTextInput("Modelo fictício")
         compose.onNodeWithText("Salvar estrutura como modelo").performScrollTo().performClick()
         compose.runOnIdle {
@@ -73,15 +72,9 @@ class PlanComposerPanelInstrumentedTest {
         compose.setContent {
             ApTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    PlanComposerPanel(
-                        layout = current.value,
-                        enabled = true,
-                        templates = emptyList(),
-                        onChange = { current.value = it },
-                        onSaveTemplate = {},
-                        onRemoveTemplate = {},
-                        sectionContent = {},
-                    )
+                    PlanComposerPanel(layout = current.value, enabled = true, templates = emptyList(),
+                        onChange = { current.value = it }, onSaveTemplate = {},
+                        onRemoveTemplate = {}, sectionContent = {})
                 }
             }
         }
@@ -107,15 +100,9 @@ class PlanComposerPanelInstrumentedTest {
             SideEffect { observed = layout }
             ApTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    PlanComposerPanel(
-                        layout = layout,
-                        enabled = true,
-                        templates = emptyList(),
+                    PlanComposerPanel(layout = layout, enabled = true, templates = emptyList(),
                         onChange = { payload = PlanLayoutV9.encode(it) },
-                        onSaveTemplate = {},
-                        onRemoveTemplate = {},
-                        sectionContent = {},
-                    )
+                        onSaveTemplate = {}, onRemoveTemplate = {}, sectionContent = {})
                 }
             }
         }
@@ -128,5 +115,28 @@ class PlanComposerPanelInstrumentedTest {
             assertEquals("Rascunho sintético não salvo", observed?.blocks?.last()?.body)
             assertEquals(12, observed?.blocks?.size)
         }
+    }
+
+    @Test fun optionalSectionRemovalRequiresConfirmationAndCancelPreservesContent() {
+        val current = mutableStateOf(PlanComposition.standard())
+        compose.setContent {
+            ApTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    PlanComposerPanel(layout = current.value, enabled = true, templates = emptyList(),
+                        onChange = { current.value = it }, onSaveTemplate = {},
+                        onRemoveTemplate = {}, sectionContent = {})
+                }
+            }
+        }
+        compose.onNodeWithText("Adicionar seção").performClick()
+        compose.onNodeWithText("Seção personalizada").performClick()
+        compose.onAllNodes(hasSetTextAction()).onLast().performTextInput("Texto não salvo da seção")
+        compose.onAllNodesWithText("Remover").onLast().performScrollTo().performClick()
+        compose.onNodeWithText("Remover Nova seção?").assertExists()
+        compose.onNodeWithText("Cancelar").performClick()
+        compose.runOnIdle { assertEquals("Texto não salvo da seção", current.value.blocks.last().body) }
+        compose.onAllNodesWithText("Remover").onLast().performScrollTo().performClick()
+        compose.onNodeWithText("Remover seção").performClick()
+        compose.runOnIdle { assertEquals(11, current.value.blocks.size) }
     }
 }

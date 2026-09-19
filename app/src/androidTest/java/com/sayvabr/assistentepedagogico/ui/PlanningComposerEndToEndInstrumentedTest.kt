@@ -65,7 +65,7 @@ class PlanningComposerEndToEndInstrumentedTest {
         compose.onAllNodesWithText("Planejamento").onLast().performClick()
         compose.onNodeWithText("Abrir e editar plano").performScrollTo().performClick()
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithText("Seção 12 de 12").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("ETAPA 12 / 12").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onAllNodes(hasSetTextAction()).onLast().performScrollTo()
             .performTextReplacement("Nota fictícia atualizada pelo editor")
@@ -77,7 +77,7 @@ class PlanningComposerEndToEndInstrumentedTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Abrir e editar plano").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Abrir e editar plano").performScrollTo().performClick()
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithText("Seção 12 de 12").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("ETAPA 12 / 12").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onAllNodes(hasSetTextAction()).onLast()
             .assertTextContains("Nota fictícia atualizada pelo editor")
