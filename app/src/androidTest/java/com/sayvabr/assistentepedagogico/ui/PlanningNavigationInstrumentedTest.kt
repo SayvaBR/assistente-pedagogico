@@ -61,14 +61,13 @@ class PlanningNavigationInstrumentedTest {
         openPlanning()
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
         compose.onNodeWithText("Novo plano de aula").assertExists()
-        // The template-name field comes first; section names use a dedicated validated rename dialog.
-        // The next text input is the canonical lesson title.
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Plano totalmente fictício")
-        compose.onNodeWithText("Voltar").performClick()
+        // Models are collapsed by default: the first editable input is the actual lesson title.
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Plano totalmente fictício")
+        compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Plano totalmente fictício").assertExists()
-        compose.onNodeWithText("Voltar").performClick()
+        compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("Descartar").performClick()
         compose.onNodeWithText("Adicionar aula").assertExists()
         assertTrue(requireNotNull(store).read().lessons.isEmpty())
@@ -90,10 +89,10 @@ class PlanningNavigationInstrumentedTest {
         val restoration = StateRestorationTester(compose)
         openPlanning(restoration)
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Rascunho após rotação")
+        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Rascunho após rotação")
         restoration.emulateSavedInstanceStateRestore()
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Rascunho após rotação").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Voltar").performClick()
+        compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Rascunho após rotação").assertExists()
