@@ -1,17 +1,22 @@
 package com.sayvabr.assistentepedagogico.ui
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sayvabr.assistentepedagogico.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -93,6 +98,7 @@ fun LessonEditorV6(
     val allocatedMinutes = listOf(openingMinutes, developmentMinutes, closingMinutes)
         .sumOf { it.toLongOrNull() ?: 0L }
     val totalMinutes = duration.toLongOrNull() ?: 0L
+    val timingFraction = if (totalMinutes > 0L) (allocatedMinutes.toFloat() / totalMinutes).coerceIn(0f, 1f) else 0f
 
     fun editorInput() = LessonPlanV6.Input(
         title, subject, day, time, duration.toIntOrNull() ?: 0, objective, specific, content, bncc,
@@ -128,7 +134,8 @@ fun LessonEditorV6(
     @Composable fun TextField(label: String, value: String, multiline: Boolean = false, setter: (String) -> Unit) {
         OutlinedTextField(value = value, onValueChange = { update(value, it, setter) },
             label = { Text(label) }, enabled = editable, singleLine = !multiline,
-            minLines = if (multiline) 3 else 1, modifier = Modifier.fillMaxWidth())
+            minLines = if (multiline) 3 else 1, modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp))
         Spacer(Modifier.height(9.dp))
     }
     fun requestTransition(target: LessonStatus) {
@@ -137,17 +144,18 @@ fun LessonEditorV6(
     }
 
     Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f)) {
-                Text(if (initial == null) "Novo plano de aula" else "Plano de aula", color = ApColors.Navy, fontWeight = FontWeight.Black)
-                Text(classroom.name, color = ApColors.Navy)
-            }
-            TextButton(onClick = back) { Text("Voltar") }
-        }
-        Spacer(Modifier.height(10.dp))
+        PlanningTopBar(if (initial == null) "Novo plano de aula" else "Plano de aula",
+            subtitle = classroom.name, back = back)
+        Spacer(Modifier.height(12.dp))
         ApCard {
             ApEyebrow("Estado pedagógico", onPrimary = false)
-            Text(initial?.status?.label ?: LessonStatus.DRAFT.label, color = ApColors.Navy, fontWeight = FontWeight.Black)
+            Spacer(Modifier.height(6.dp))
+            Surface(color = ApPalette.LightSurface, shape = RoundedCornerShape(50.dp)) {
+                Text(initial?.status?.label ?: LessonStatus.DRAFT.label,
+                    Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    color = ApPalette.Pressed, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            Spacer(Modifier.height(7.dp))
             if (initial == null) {
                 Text("Salve o plano primeiro. Você poderá marcá-lo como pronto depois.", color = ApColors.Navy)
             } else {
@@ -203,19 +211,20 @@ fun LessonEditorV6(
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedTextField(day, { update(day, it) { v -> day = v } },
                                     label = { Text("Data") }, enabled = editable, singleLine = true,
-                                    modifier = Modifier.weight(1f))
+                                    modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp))
                                 OutlinedTextField(time, { update(time, it) { v -> time = v } },
                                     label = { Text("Início") }, enabled = editable, singleLine = true,
-                                    modifier = Modifier.weight(1f))
+                                    modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp))
                             }
                             Spacer(Modifier.height(9.dp))
                             OutlinedTextField(duration, { update(duration, it) { v -> duration = v.filter(Char::isDigit) } },
                                 label = { Text("Duração (min)") }, enabled = editable, singleLine = true,
-                                modifier = Modifier.fillMaxWidth())
+                                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
                             Spacer(Modifier.height(8.dp))
                             Text(if (predictedEnd != null) "Término previsto: $predictedEnd"
                                 else "Informe início (HH:MM) e duração válida para calcular o término.",
-                                color = ApColors.Navy, fontWeight = if (predictedEnd != null) FontWeight.Bold else FontWeight.Normal)
+                                color = ApColors.Navy,
+                                fontWeight = if (predictedEnd != null) FontWeight.Bold else FontWeight.Normal)
                         }
                         PlanBlockKind.OBJECTIVES -> {
                             TextField("Objetivo geral", objective, true) { objective = it }
@@ -225,7 +234,7 @@ fun LessonEditorV6(
                         PlanBlockKind.BNCC -> {
                             OutlinedTextField(value = bncc, onValueChange = {}, readOnly = true,
                                 label = { Text("Habilidades BNCC selecionadas") }, minLines = 2,
-                                modifier = Modifier.fillMaxWidth())
+                                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
                             Spacer(Modifier.height(8.dp))
                             if (editable) ApRaisedButton("Buscar e selecionar habilidades BNCC", onClick = {
                                 showBnccPicker = true
@@ -256,11 +265,21 @@ fun LessonEditorV6(
         Spacer(Modifier.height(12.dp))
         ApCard {
             ApEyebrow("Concluir e compartilhar", onPrimary = false)
+            Spacer(Modifier.height(8.dp))
             Text("Momentos distribuídos: $allocatedMinutes de $totalMinutes min" +
                 if (allocatedMinutes > totalMinutes) " — ajuste os tempos antes de salvar." else "",
                 color = ApColors.Navy, fontWeight = FontWeight.Bold)
-            error?.let { Text(it, color = ApColors.Navy, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(9.dp))
+            Box(Modifier.fillMaxWidth().height(9.dp).background(ApPalette.LightSurface, RoundedCornerShape(50.dp))) {
+                Box(Modifier.fillMaxWidth(timingFraction).height(9.dp)
+                    .background(if (allocatedMinutes > totalMinutes) ApPalette.Navy else ApPalette.Primary,
+                        RoundedCornerShape(50.dp)))
+            }
+            Spacer(Modifier.height(9.dp))
+            Text("A barra representa apenas a distribuição dos minutos, não a qualidade pedagógica do plano.",
+                color = ApPalette.Navy.copy(alpha = .75f), fontSize = 11.sp)
+            error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = ApColors.Navy, fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.height(11.dp))
             if (editable) {
                 ApRaisedButton(if (initial == null) "Salvar plano de aula" else "Salvar alterações", onClick = {
                     runCatching { save(validatedEditorInput().copy(composition = layout)) }
