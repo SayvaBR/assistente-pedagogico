@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # CI must validate the PR branch HEAD, not an implicit test merge commit.
+          # Validate PR branch HEAD rather than an implicit test merge commit.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
@@ -28,10 +28,9 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # The owner explicitly requested a disposable PR #15 debug APK for real-device testing.
-      # Refuse a wrong-commit binary and any missing/empty output; this is not a release.
+      # Preview authorized by the owner only for PR #15 and its isolated design-review PR #16.
       - name: Check APK and record build provenance
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15
+        if: github.event_name == 'pull_request' && (github.event.pull_request.number == 15 || github.event.pull_request.number == 16)
         env:
           head_sha: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -41,7 +40,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$head_sha"
           sha256sum "$apk"
       - name: Upload installable debug preview APK (3-day retention)
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15
+        if: github.event_name == 'pull_request' && (github.event.pull_request.number == 15 || github.event.pull_request.number == 16)
         uses: actions/upload-artifact@v4
         with:
           name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}
