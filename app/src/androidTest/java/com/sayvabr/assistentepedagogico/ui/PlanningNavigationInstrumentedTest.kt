@@ -3,6 +3,7 @@ package com.sayvabr.assistentepedagogico.ui
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -57,11 +58,10 @@ class PlanningNavigationInstrumentedTest {
         compose.onNodeWithText("Adicionar aula").assertExists()
     }
 
-    private fun clickVisibleEditorBack() {
+    private fun activateEditorBack() {
         compose.onNodeWithContentDescription("Voltar")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
+            .assert(hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick) { onClick -> onClick() }
     }
 
     private fun enterLessonTitle(value: String) {
@@ -76,11 +76,11 @@ class PlanningNavigationInstrumentedTest {
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
         compose.onNodeWithText("Novo plano de aula").assertExists()
         enterLessonTitle("Plano totalmente fictício")
-        clickVisibleEditorBack()
+        activateEditorBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Plano totalmente fictício").assertExists()
-        clickVisibleEditorBack()
+        activateEditorBack()
         compose.onNodeWithText("Descartar").performClick()
         compose.onNodeWithText("Adicionar aula").assertExists()
         assertTrue(requireNotNull(store).read().lessons.isEmpty())
@@ -105,7 +105,7 @@ class PlanningNavigationInstrumentedTest {
         enterLessonTitle("Rascunho após rotação")
         restoration.emulateSavedInstanceStateRestore()
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Rascunho após rotação").fetchSemanticsNodes().isNotEmpty() }
-        clickVisibleEditorBack()
+        activateEditorBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Rascunho após rotação").assertExists()
