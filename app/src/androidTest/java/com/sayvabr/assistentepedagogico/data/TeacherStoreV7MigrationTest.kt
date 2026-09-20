@@ -58,7 +58,7 @@ class TeacherStoreV7MigrationTest {
     @Test fun v6UpgradeKeepsExistingDataAndActivitiesPersistAfterReopen() {
         store = TeacherStore(context)
         val first = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, first.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, first.readableDatabase.version)
         assertEquals("Plano histórico", first.read().lessons.single { it.id == 17L }.title)
         assertEquals(LessonStatus.DRAFT, first.read().lessons.single { it.id == 17L }.status)
         assertEquals("10:00", first.read().appointments.single().time)
@@ -74,7 +74,7 @@ class TeacherStoreV7MigrationTest {
         first.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, reopened.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, reopened.readableDatabase.version)
         assertEquals(id, reopened.listActivities(7, 17).single().id)
         assertTrue(reopened.listActivities(8).isEmpty())
         assertEquals(31L, reopened.read().files.single().id)

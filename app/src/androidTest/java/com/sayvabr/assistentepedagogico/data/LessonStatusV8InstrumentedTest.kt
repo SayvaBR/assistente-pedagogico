@@ -159,7 +159,7 @@ class LessonStatusV8InstrumentedTest {
         } finally { db.close() }
         store = TeacherStore(context)
         val s = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, s.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, s.readableDatabase.version)
         assertEquals(LessonStatus.DRAFT, s.read().lessons.single { it.id == 21L }.status)
         assertEquals(LessonStatus.ARCHIVED, s.read().lessons.single { it.id == 22L }.status)
         assertEquals(31L, s.listActivities(11, 22).single().id)

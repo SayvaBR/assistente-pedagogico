@@ -35,9 +35,10 @@ data class TeacherSnapshot(
     val appointments: List<Appointment>,
     val files: List<SavedFile>,
     val folders: List<FileFolder> = emptyList(),
+    val attendanceSessions: List<AttendanceSession> = emptyList(),
 )
 
-class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, PlanLayoutV9.VERSION) {
+class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationContext, "pedagogico.db", null, AttendanceV10.VERSION) {
     override fun onConfigure(db: SQLiteDatabase) { db.setForeignKeyConstraintsEnabled(true) }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -57,11 +58,12 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         LessonActivityV7.migrate(db)
         LessonStatusV8.migrate(db)
         PlanLayoutV9.migrate(db)
+        AttendanceV10.migrate(db, captureLegacyRows = false)
     }
 
     /** SQLiteOpenHelper wraps onUpgrade in a transaction, rolling back every ALTER on failure. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        require(oldVersion in 1..8 && newVersion == PlanLayoutV9.VERSION) {
+        require(oldVersion in 1..9 && newVersion == AttendanceV10.VERSION) {
             "Unsupported database migration from $oldVersion to $newVersion"
         }
         if (oldVersion < 2) db.execSQL("ALTER TABLE classrooms ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
@@ -72,6 +74,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         if (oldVersion < 7) LessonActivityV7.migrate(db)
         if (oldVersion < 8) LessonStatusV8.migrate(db)
         if (oldVersion < 9) PlanLayoutV9.migrate(db)
+        if (oldVersion < 10) AttendanceV10.migrate(db, captureLegacyRows = true)
     }
 
     fun read(): TeacherSnapshot {
@@ -98,7 +101,8 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         val files = FileLibraryV4.files(db).filter { it.trashedAt == null }.map {
             SavedFile(it.id, it.name, it.uri, it.folderId, it.favorite, it.trashedAt, it.accessState)
         }
-        return TeacherSnapshot(profile, classrooms, students, lessons, attendance, observations, appointments, files, FileLibraryV4.folders(db))
+        return TeacherSnapshot(profile, classrooms, students, lessons, attendance, observations, appointments, files,
+            FileLibraryV4.folders(db), AttendanceV10.read(db))
     }
 
     /** Planning activities share this Activity-owned SQLite helper, never a second connection. */
@@ -258,21 +262,7 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     fun saveAttendance(classroomId: Long, day: String, marks: Map<Long, String>) {
         LocalDate.parse(day)
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            val allowed = mutableSetOf<Long>()
-            db.rawQuery("SELECT id FROM students WHERE classroom_id=?", arrayOf(classroomId.toString())).use { c -> while (c.moveToNext()) allowed += c.getLong(0) }
-            require(marks.keys.all { it in allowed }) { "Aluno não pertence a esta turma." }
-            marks.forEach { (studentId, status) ->
-                if (status == "?") db.delete("attendance", "student_id=? AND day=?", arrayOf(studentId.toString(), day))
-                else {
-                    require(status == "P" || status == "F") { "Situação de frequência inválida." }
-                    db.insertWithOnConflict("attendance", null, values("classroom_id" to classroomId, "student_id" to studentId, "day" to day, "status" to status), SQLiteDatabase.CONFLICT_REPLACE)
-                }
-            }
-            db.setTransactionSuccessful()
-        } finally { db.endTransaction() }
+        AttendanceV10.save(writableDatabase, classroomId, day, marks)
     }
 
     fun addObservation(classroomId: Long, studentId: Long?, kind: String, body: String, shareApproved: Boolean) {

@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -87,6 +88,8 @@ class TeacherBackupRestoreInstrumentedTest {
         assertEquals("EF05CI02", restored.lessons.single().bnccCodes)
         assertEquals("Material ampliado", restored.lessons.single().adaptations)
         assertEquals(1, restored.attendance.size)
+        assertEquals(1, restored.attendanceSessions.size)
+        assertEquals("Aluna Fictícia", restored.attendanceSessions.single().members.single().studentName)
         assertEquals(1, restored.observations.size)
         assertEquals(1, restored.appointments.size)
         assertEquals("revoked", restored.files.single().accessState)
@@ -109,8 +112,7 @@ class TeacherBackupRestoreInstrumentedTest {
         assertThrows(IllegalArgumentException::class.java) { s.restoreBackupAfterConfirmation(badReference, true) }
         assertEquals(before, s.read())
 
-        // Duplicate attendance keys are valid JSON but violate SQLite's composite PRIMARY KEY.
-        // This fails after DELETE and INSERT have started: the transaction must restore every old row.
+        // Duplicate attendance keys are rejected before restore touches the existing database.
         val badConstraint = JSONObject(backup).apply {
             val entries = getJSONArray("attendance")
             entries.put(JSONObject(entries.getJSONObject(0).toString()))
@@ -120,5 +122,29 @@ class TeacherBackupRestoreInstrumentedTest {
         s.close()
         store = TeacherStore(context)
         assertEquals(before, requireNotNull(store).read())
+    }
+
+    @Test fun backupPreservesDeletedStudentInHistoricalCallAndLegacyBackupStaysIncomplete() {
+        val backupBeforeDeletion = populate()
+        val s = requireNotNull(store)
+        val originalSession = s.read().attendanceSessions.single()
+        val classroomId = originalSession.classroomId
+        val studentId = originalSession.members.single().studentId
+        s.deleteStudent(classroomId, studentId)
+        val backupWithSnapshot = s.exportBackupPayload()
+
+        s.restoreBackupAfterConfirmation(backupWithSnapshot, true)
+        var restored = s.read()
+        assertTrue(restored.students.isEmpty())
+        assertEquals("Aluna Fictícia", restored.attendanceSessions.single().members.single().studentName)
+        assertEquals("P", restored.attendanceSessions.single().members.single().status)
+        assertTrue(restored.attendance.isEmpty())
+
+        // Older v1 backups have no session roster; restore preserves their marks as partial history.
+        val legacy = JSONObject(backupBeforeDeletion).apply { remove("attendanceSessions") }.toString()
+        s.restoreBackupAfterConfirmation(legacy, true)
+        restored = s.read()
+        assertFalse(restored.attendanceSessions.single().rosterComplete)
+        assertEquals("Aluna Fictícia", restored.attendanceSessions.single().members.single().studentName)
     }
 }

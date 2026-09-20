@@ -2,6 +2,8 @@ package com.sayvabr.assistentepedagogico.ui
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sayvabr.assistentepedagogico.data.Attendance
+import com.sayvabr.assistentepedagogico.data.AttendanceSession
+import com.sayvabr.assistentepedagogico.data.AttendanceSessionMember
 import com.sayvabr.assistentepedagogico.data.Classroom
 import com.sayvabr.assistentepedagogico.data.Lesson
 import com.sayvabr.assistentepedagogico.data.Observation
@@ -67,6 +69,27 @@ class HomeContentPolicyInstrumentedTest {
             observation(6L, 1L), observation(100L, 2L),
         ))
         assertEquals(listOf(8L, 7L, 6L), HomeContentPolicy.forClass(data, first, day).recentObservations.map { it.id })
+    }
+
+    @Test fun currentClassRosterChangesDoNotRewriteSavedCallSummary() {
+        val source = fixture()
+        val data = source.copy(
+            students = source.students + Student(11L, first.id, "Adicionado depois"),
+            attendanceSessions = listOf(AttendanceSession(
+                id = 55L,
+                classroomId = first.id,
+                date = day,
+                rosterComplete = true,
+                members = listOf(
+                    AttendanceSessionMember(10L, "Estudante A", "P"),
+                    AttendanceSessionMember(12L, "Estudante removido", "?"),
+                ),
+            )),
+        )
+        val overview = HomeContentPolicy.forClass(data, first, day)
+        assertEquals(2, overview.studentCount)
+        assertEquals(1, overview.attendanceMarked)
+        assertEquals(true, overview.attendanceRosterComplete)
     }
 
     @Test fun archivedOrUnknownClassCannotBeProjected() {

@@ -15,7 +15,26 @@ object TeacherBackupCodec {
         archiveOrigins: Map<Long, LessonStatus> = emptyMap(),
         layouts: List<Pair<Long, String>> = emptyList(),
         templates: List<Triple<Long, String, String>> = emptyList(),
-    ): String = JSONObject().apply {
+    ): String {
+        val sessions = if (snapshot.attendanceSessions.isNotEmpty() || snapshot.attendance.isEmpty()) {
+            snapshot.attendanceSessions
+        } else {
+            val names = snapshot.students.associateBy { it.id }
+            snapshot.attendance.groupBy { it.classroomId to it.date }.entries.mapIndexed { index, (key, marks) ->
+                AttendanceSession(
+                    id = index + 1L,
+                    classroomId = key.first,
+                    date = key.second,
+                    rosterComplete = false,
+                    members = marks.map { mark ->
+                        val student = names[mark.studentId]
+                            ?: throw IllegalArgumentException("Aluno de frequência sem cadastro no snapshot do backup.")
+                        AttendanceSessionMember(mark.studentId, student.name, mark.status)
+                    },
+                )
+            }
+        }
+        return JSONObject().apply {
         put("format", FORMAT)
         put("version", VERSION)
         put("profile", snapshot.profile?.let { JSONObject().put("name", it.name) } ?: JSONObject.NULL)
@@ -46,6 +65,15 @@ object TeacherBackupCodec {
         put("attendance", JSONArray().apply { snapshot.attendance.forEach { a -> put(JSONObject().apply {
             put("classroomId", a.classroomId); put("studentId", a.studentId); put("date", a.date); put("status", a.status)
         }) } })
+        put("attendanceSessions", JSONArray().apply { sessions.forEach { session ->
+            put(JSONObject().apply {
+                put("id", session.id); put("classroomId", session.classroomId); put("date", session.date)
+                put("rosterComplete", session.rosterComplete)
+                put("members", JSONArray().apply { session.members.forEach { member -> put(JSONObject().apply {
+                    put("studentId", member.studentId); put("studentName", member.studentName); put("status", member.status)
+                }) } })
+            })
+        } })
         put("observations", JSONArray().apply { snapshot.observations.forEach { o -> put(JSONObject().apply {
             put("id", o.id); put("classroomId", o.classroomId); put("studentId", o.studentId ?: JSONObject.NULL)
             put("kind", o.kind); put("body", o.body); put("date", o.date); put("shareApproved", o.shareApproved)
@@ -71,7 +99,8 @@ object TeacherBackupCodec {
             val template = PlanTemplate(name, PlanLayoutV9.decode(raw).blocks)
             put(JSONObject().put("id", id).put("name", template.name).put("layout", JSONObject(PlanLayoutV9.encode(template.instantiate()))))
         } })
-    }.toString()
+        }.toString()
+    }
 
     /** Validate envelope and ownership before preview or restore can touch SQLite. */
     fun validate(payload: String): JSONObject {
@@ -93,6 +122,10 @@ object TeacherBackupCodec {
         // New optional v9 content defaults to empty for previously exported v1 archives.
         if (!root.has("lessonLayouts")) root.put("lessonLayouts", JSONArray())
         if (!root.has("planTemplates")) root.put("planTemplates", JSONArray())
+        // Missing attendanceSessions identifies a v1 backup that needs a partial legacy snapshot.
+        if (root.has("attendanceSessions")) require(root.optJSONArray("attendanceSessions") != null) {
+            "Backup incompleto: attendanceSessions."
+        }
         listOf("classrooms", "students", "lessons", "activities", "attendance", "observations", "appointments", "files", "folders", "lessonLayouts", "planTemplates").forEach {
             require(root.optJSONArray(it) != null) { "Backup incompleto: $it." }
         }

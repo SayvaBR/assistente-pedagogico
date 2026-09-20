@@ -37,7 +37,7 @@ class TeacherStoreV7FreshInstallTest {
 
     @Test fun freshInstallCrudDuplicateAndReopenPreservePlanAndClassIsolation() {
         val first = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, first.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, first.readableDatabase.version)
         val classroomId = first.createClass("Turma fictícia", "Ensino Fundamental", "Matutino")
         val otherClassId = first.createClass("Outra turma fictícia", "Ensino Fundamental", "Vespertino")
         first.saveLesson(

@@ -35,11 +35,9 @@ fun AttendanceHistoryScreen(
     startAttendance: () -> Unit,
 ) {
     val students = snapshot.students.filter { it.classroomId == classroom.id }
-    val studentIds = students.mapTo(mutableSetOf()) { it.id }
-    val sessions = snapshot.attendance
-        .filter { it.classroomId == classroom.id && it.studentId in studentIds }
-        .groupBy { it.date }
-        .toSortedMap(reverseOrder())
+    val sessions = snapshot.attendanceSessions
+        .filter { it.classroomId == classroom.id }
+        .sortedWith(compareByDescending<com.sayvabr.assistentepedagogico.data.AttendanceSession> { it.date }.thenByDescending { it.id })
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         TextButton(onClick = back) { Text("Voltar", color = ApColors.Primary) }
@@ -49,41 +47,43 @@ fun AttendanceHistoryScreen(
     Text(classroom.name, color = ApColors.Navy, fontSize = 14.sp)
     Spacer(Modifier.height(18.dp))
 
-    if (students.isEmpty()) {
+    if (sessions.isEmpty()) {
         Surface(color = ApColors.White, shape = RoundedCornerShape(19.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp)) {
-                Text("Cadastre os alunos primeiro", color = ApColors.Navy, fontWeight = FontWeight.Black)
-                Text("O histórico será formado quando você salvar uma chamada.", color = ApColors.Navy)
-            }
-        }
-    } else if (sessions.isEmpty()) {
-        Surface(color = ApColors.White, shape = RoundedCornerShape(19.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(18.dp)) {
-                Text("Nenhuma chamada salva", color = ApColors.Navy, fontWeight = FontWeight.Black)
-                Spacer(Modifier.height(8.dp))
-                Text("Faça a chamada da turma para começar o histórico.", color = ApColors.Navy)
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = startAttendance, colors = ButtonDefaults.buttonColors(containerColor = ApColors.Primary)) {
-                    Text("Fazer chamada")
+                if (students.isEmpty()) {
+                    Text("Cadastre os alunos primeiro", color = ApColors.Navy, fontWeight = FontWeight.Black)
+                    Text("O histórico será formado quando você salvar uma chamada.", color = ApColors.Navy)
+                } else {
+                    Text("Nenhuma chamada salva", color = ApColors.Navy, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Faça a chamada da turma para começar o histórico.", color = ApColors.Navy)
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = startAttendance, colors = ButtonDefaults.buttonColors(containerColor = ApColors.Primary)) {
+                        Text("Fazer chamada")
+                    }
                 }
             }
         }
     }
 
-    sessions.forEach { (day, marks) ->
-        val present = marks.count { it.status == "P" }
-        val absent = marks.count { it.status == "F" }
-        val pending = (students.size - marks.map { it.studentId }.distinct().size).coerceAtLeast(0)
-        val label = runCatching { LocalDate.parse(day).format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) }.getOrDefault(day)
+    sessions.forEach { session ->
+        val present = session.members.count { it.status == "P" }
+        val absent = session.members.count { it.status == "F" }
+        val summary = if (session.rosterComplete) {
+            "$present presentes · $absent faltas · ${session.members.count { it.status == "?" }} pendentes"
+        } else {
+            "$present presentes · $absent faltas · lista original incompleta"
+        }
+        val label = runCatching { LocalDate.parse(session.date).format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) }.getOrDefault(session.date)
         Surface(
-            modifier = Modifier.fillMaxWidth().clickable { openDay(day) },
+            modifier = Modifier.fillMaxWidth().clickable { openDay(session.date) },
             shape = RoundedCornerShape(19.dp), color = ApColors.White,
             border = BorderStroke(1.dp, ApColors.Primary.copy(alpha = .22f)),
         ) {
             Column(Modifier.padding(17.dp)) {
                 Text(label, color = ApColors.Navy, fontWeight = FontWeight.Black, fontSize = 18.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("$present presentes · $absent faltas · $pending pendentes", color = ApColors.Navy, fontSize = 13.sp)
+                Text(summary, color = ApColors.Navy, fontSize = 13.sp)
                 Spacer(Modifier.height(7.dp))
                 Text("Abrir chamada para consultar ou corrigir", color = ApColors.Primary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
@@ -94,7 +94,7 @@ fun AttendanceHistoryScreen(
     if (students.isNotEmpty()) {
         Button(onClick = startAttendance, modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp), colors = ButtonDefaults.buttonColors(containerColor = ApColors.Primary)) {
-            Text("Fazer chamada de outro dia", fontWeight = FontWeight.Bold)
+            Text("Fazer chamada de hoje", fontWeight = FontWeight.Bold)
         }
     }
 }

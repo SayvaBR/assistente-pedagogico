@@ -12,6 +12,7 @@ internal data class HomeOverview(
     val recentObservations: List<Observation>,
     val studentCount: Int,
     val attendanceMarked: Int,
+    val attendanceRosterComplete: Boolean?,
 )
 
 /** Pure, testable selection policy: classroom identity is its ID, never its display name. */
@@ -23,6 +24,9 @@ internal object HomeContentPolicy {
         }
         val students = data.students.filter { it.classroomId == classroom.id }
         val studentIds = students.map { it.id }.toSet()
+        val attendanceSession = data.attendanceSessions.firstOrNull {
+            it.classroomId == classroom.id && it.date == day
+        }
         return HomeOverview(
             lesson = data.lessons.asSequence()
                 .filter { it.classroomId == classroom.id && it.date == day && !it.archived }
@@ -32,11 +36,13 @@ internal object HomeContentPolicy {
                 .sortedByDescending { it.id }
                 .take(3)
                 .toList(),
-            studentCount = students.size,
-            attendanceMarked = data.attendance.count {
-                it.classroomId == classroom.id && it.date == day && it.studentId in studentIds &&
-                    (it.status == "P" || it.status == "F")
-            },
+            studentCount = attendanceSession?.members?.size ?: students.size,
+            attendanceMarked = attendanceSession?.members?.count { it.status == "P" || it.status == "F" }
+                ?: data.attendance.count {
+                    it.classroomId == classroom.id && it.date == day && it.studentId in studentIds &&
+                        (it.status == "P" || it.status == "F")
+                },
+            attendanceRosterComplete = attendanceSession?.rosterComplete,
         )
     }
 }
