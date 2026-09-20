@@ -7,3 +7,5 @@ Navegação prevista: Hoje, Turmas, Planejamento, Arquivos, Mais. Etapas visíve
 Free: até 2 turmas ativas, alunos ilimitados nessas turmas, ciclo real de uso e backup/restauração próprios. Pro: turmas ilimitadas e recursos avançados. Downgrade nunca remove ou oculta histórico.
 
 Consultar também o documento condensado `docs/BLUEPRINT.md`. A especificação extensa original foi entregue pelo proprietário em anexo na conversa de origem e deverá ser versionada integralmente antes dos milestones com dados de alunos.
+
+Mapa da primeira abertura, ciclo de uso, decisões pendentes de conta/integrações/monetização e critérios de aceite: `docs/PRODUCT_JOURNEY.md`. Até uma decisão registrada pela titular, permanece a regra existente: uso local disponível e login não obrigatório.
