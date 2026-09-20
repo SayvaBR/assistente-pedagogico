@@ -28,9 +28,9 @@ jobs:
           gradle-version: '9.6.0'
       - name: Build, unit test, lint and compile instrumentation tests
         run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest
-      # Owner-authorized, disposable debug only: PR #15 baseline and its stacked design PR #16.
+      # Owner-authorized, disposable debug only: PR #15, stacked design PR #16, and PR #19 entry-flow testing.
       - name: Check APK and record build provenance
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15 || (github.event_name == 'pull_request' && github.event.pull_request.number == 16)
+        if: github.event_name == 'pull_request' && (github.event.pull_request.number == 15 || github.event.pull_request.number == 16 || github.event.pull_request.number == 19)
         env:
           head_sha: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -40,7 +40,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$head_sha"
           sha256sum "$apk"
       - name: Upload installable debug preview APK (3-day retention)
-        if: github.event_name == 'pull_request' && github.event.pull_request.number == 15 || (github.event_name == 'pull_request' && github.event.pull_request.number == 16)
+        if: github.event_name == 'pull_request' && (github.event.pull_request.number == 15 || github.event.pull_request.number == 16 || github.event.pull_request.number == 19)
         uses: actions/upload-artifact@v4
         with:
           name: assistente-pedagogico-preview-${{ github.event.pull_request.head.sha }}
