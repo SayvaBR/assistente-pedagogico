@@ -15,7 +15,7 @@ import com.sayvabr.assistentepedagogico.data.TeacherStore
 import com.sayvabr.assistentepedagogico.ui.ApColors
 import com.sayvabr.assistentepedagogico.ui.ApTheme
 import com.sayvabr.assistentepedagogico.ui.LocalTeacherStore
-import com.sayvabr.assistentepedagogico.ui.TeacherApp
+import com.sayvabr.assistentepedagogico.ui.FirstAccessFlow
 
 class MainActivity : ComponentActivity() {
     private val storeDelegate = lazy { TeacherStore(applicationContext) }
@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
                         .statusBarsPadding().navigationBarsPadding().imePadding()
                 ) {
                     CompositionLocalProvider(LocalTeacherStore provides store) {
-                        TeacherApp(store)
+                        FirstAccessFlow(store)
                     }
                 }
             }
