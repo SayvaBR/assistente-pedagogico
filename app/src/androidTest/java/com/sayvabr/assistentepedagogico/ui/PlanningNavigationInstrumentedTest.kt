@@ -3,6 +3,7 @@ package com.sayvabr.assistentepedagogico.ui
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -57,18 +58,29 @@ class PlanningNavigationInstrumentedTest {
         compose.onNodeWithText("Adicionar aula").assertExists()
     }
 
+    private fun activateEditorBack() {
+        compose.onNodeWithContentDescription("Voltar")
+            .assert(hasClickAction())
+            .performSemanticsAction(SemanticsActions.OnClick) { onClick -> onClick() }
+    }
+
+    private fun enterLessonTitle(value: String) {
+        compose.onNode(hasSetTextAction() and hasText("Título da aula"))
+            .performScrollTo()
+            .performTextInput(value)
+        compose.onNodeWithText(value).assertExists()
+    }
+
     @Test fun unsavedLessonBackRequiresConfirmationAndCanKeepEditingOrDiscard() {
         openPlanning()
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
         compose.onNodeWithText("Novo plano de aula").assertExists()
-        // The template-name field comes first; section names use a dedicated validated rename dialog.
-        // The next text input is the canonical lesson title.
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Plano totalmente fictício")
-        compose.onNodeWithText("Voltar").performClick()
+        enterLessonTitle("Plano totalmente fictício")
+        activateEditorBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Plano totalmente fictício").assertExists()
-        compose.onNodeWithText("Voltar").performClick()
+        activateEditorBack()
         compose.onNodeWithText("Descartar").performClick()
         compose.onNodeWithText("Adicionar aula").assertExists()
         assertTrue(requireNotNull(store).read().lessons.isEmpty())
@@ -90,10 +102,10 @@ class PlanningNavigationInstrumentedTest {
         val restoration = StateRestorationTester(compose)
         openPlanning(restoration)
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
-        compose.onAllNodes(hasSetTextAction())[1].performTextInput("Rascunho após rotação")
+        enterLessonTitle("Rascunho após rotação")
         restoration.emulateSavedInstanceStateRestore()
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Rascunho após rotação").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Voltar").performClick()
+        activateEditorBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Rascunho após rotação").assertExists()
