@@ -20,6 +20,7 @@ object TeacherBackupRestore {
         val lessons: List<JSONObject>, val attendance: List<JSONObject>, val observations: List<JSONObject>,
         val appointments: List<JSONObject>, val folders: List<JSONObject>, val files: List<JSONObject>,
         val activities: List<JSONObject>, val layouts: List<JSONObject>, val templates: List<JSONObject>,
+        val attendanceSessions: List<JSONObject>?,
     ) {
         fun preview() = Preview(classrooms.size, students.size, lessons.size, attendance.size,
             observations.size, appointments.size, files.size, activities.size)
@@ -56,6 +57,7 @@ object TeacherBackupRestore {
             activities = root.getJSONArray("activities").rows(),
             layouts = root.getJSONArray("lessonLayouts").rows(),
             templates = root.getJSONArray("planTemplates").rows(),
+            attendanceSessions = root.optJSONArray("attendanceSessions")?.rows(),
         )
         result.profile?.required("name")
         val classes = result.classrooms.uniqueIds("Turmas")
@@ -132,12 +134,13 @@ object TeacherBackupRestore {
     }
 
     fun restore(db: SQLiteDatabase, payload: String) {
-        require(db.version == PlanLayoutV9.VERSION) { "Atualize o banco antes de restaurar." }
+        require(db.version == AttendanceV10.VERSION) { "Atualize o banco antes de restaurar." }
         // Validation must finish before the first DELETE; malformed input cannot touch current data.
         val records = parse(payload)
         db.beginTransaction()
         try {
-            listOf("lesson_layouts", "plan_templates", "lesson_activities", "attendance", "observations", "lessons", "students", "appointments", "saved_files",
+            listOf("lesson_layouts", "plan_templates", "lesson_activities", "attendance_session_members", "attendance_sessions",
+                "attendance", "observations", "lessons", "students", "appointments", "saved_files",
                 "file_folders", "classrooms", "profile").forEach { db.delete(it, null, null) }
             records.profile?.let { db.insertOrThrow("profile", null, values("id" to 1, "name" to it.required("name"))) }
             records.classrooms.forEach { db.insertOrThrow("classrooms", null, values(
@@ -181,6 +184,8 @@ object TeacherBackupRestore {
             records.attendance.forEach { db.insertOrThrow("attendance", null, values(
                 "classroom_id" to it.id("classroomId"), "student_id" to it.id("studentId"),
                 "day" to it.required("date"), "status" to it.required("status"))) }
+            records.attendanceSessions?.let { AttendanceV10.restoreBackup(db, it) }
+                ?: AttendanceV10.captureLegacyAttendance(db)
             records.observations.forEach { db.insertOrThrow("observations", null, values(
                 "id" to it.id(), "classroom_id" to it.id("classroomId"), "student_id" to it.optionalId("studentId"),
                 "kind" to it.required("kind"), "body" to it.required("body"), "day" to it.required("date"),

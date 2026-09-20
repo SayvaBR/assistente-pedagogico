@@ -107,7 +107,7 @@ class TeacherStoreInstrumentedTest {
         assertEquals("Leitura", saved.lessons.single().title)
     }
 
-    @Test fun studentDeletionCascadesAttendanceButKeepsUnlinkedObservation() {
+    @Test fun studentDeletionKeepsHistoricalCallSnapshotAndUnlinksObservation() {
         val first = db()
         val classroomId = first.createClass("4º A", "Ensino Fundamental", "Matutino")
         first.addStudent(classroomId, "Daniel")
@@ -122,6 +122,10 @@ class TeacherStoreInstrumentedTest {
         assertEquals(listOf("Elisa"), saved.students.map { it.name })
         assertEquals(listOf(elisa), saved.attendance.map { it.studentId })
         assertEquals("P", saved.attendance.single().status)
+        val historical = saved.attendanceSessions.single()
+        assertTrue(historical.rosterComplete)
+        assertEquals(setOf("Daniel", "Elisa"), historical.members.map { it.studentName }.toSet())
+        assertEquals("F", historical.members.single { it.studentName == "Daniel" }.status)
         assertEquals(1, saved.observations.size)
         assertNull(saved.observations.single().studentId)
     }
@@ -159,8 +163,58 @@ class TeacherStoreInstrumentedTest {
         first.addStudent(classroomId, "Gabriel")
         val ids = first.read().students.map { it.id }
         first.saveAttendance(classroomId, "2026-09-16", ids.associateWith { "P" })
+        val before = first.read().attendanceSessions
         rejects { first.saveAttendance(classroomId, "2026-09-16", mapOf(ids[0] to "F", ids[1] to "INVALID")) }
         assertTrue(reopen().read().attendance.all { it.status == "P" })
+        assertEquals(before, reopen().read().attendanceSessions)
+    }
+
+    @Test fun attendanceSessionSnapshotsRosterAndRejectsStudentsAddedLater() {
+        val first = db()
+        val classroomId = first.createClass("5º D", "Ensino Fundamental", "Matutino")
+        first.addStudent(classroomId, "Helena")
+        first.addStudent(classroomId, "Igor")
+        val beforeCall = first.read().students.associateBy { it.name }
+        val helena = beforeCall.getValue("Helena").id
+        val igor = beforeCall.getValue("Igor").id
+
+        first.saveAttendance(classroomId, "2026-09-17", mapOf(helena to "P"))
+        first.addStudent(classroomId, "Júlia")
+        val thirdStudent = first.read().students.single { it.name == "Júlia" }.id
+        var session = reopen().read().attendanceSessions.single()
+        assertTrue(session.rosterComplete)
+        assertEquals(setOf(helena, igor), session.members.map { it.studentId }.toSet())
+        assertEquals("?", session.members.single { it.studentId == igor }.status)
+        rejects { db().saveAttendance(classroomId, "2026-09-17", mapOf(thirdStudent to "P")) }
+
+        db().saveAttendance(classroomId, "2026-09-17", mapOf(helena to "F"))
+        db().deleteStudent(classroomId, helena)
+        session = reopen().read().attendanceSessions.single()
+        assertEquals(setOf(helena, igor), session.members.map { it.studentId }.toSet())
+        assertEquals("Helena", session.members.single { it.studentId == helena }.studentName)
+        assertEquals("F", session.members.single { it.studentId == helena }.status)
+    }
+
+    @Test fun migrationFromV9KeepsOnlyKnownMarksAsAnIncompleteHistoricalRoster() {
+        val file = context.getDatabasePath("pedagogico.db")
+        file.parentFile?.mkdirs()
+        SQLiteDatabase.openOrCreateDatabase(file, null).use { old ->
+            TeacherStore(context).onCreate(old)
+            old.execSQL("DROP TABLE attendance_session_members")
+            old.execSQL("DROP TABLE attendance_sessions")
+            old.execSQL("INSERT INTO classrooms(id,name,stage,shift,archived) VALUES (71,'Turma v9','Ensino Fundamental','Matutino',0)")
+            old.execSQL("INSERT INTO students(id,classroom_id,name) VALUES (72,71,'Marca preservada'),(73,71,'Sem marca antiga')")
+            old.execSQL("INSERT INTO attendance(classroom_id,student_id,day,status) VALUES (71,72,'2026-09-16','P')")
+            old.version = 9
+        }
+
+        val migrated = db().read()
+        val session = migrated.attendanceSessions.single()
+        assertFalse(session.rosterComplete)
+        assertEquals("2026-09-16", session.date)
+        assertEquals(listOf("Marca preservada"), session.members.map { it.studentName })
+        db().addStudent(71, "Adicionada depois")
+        assertEquals(session, reopen().read().attendanceSessions.single())
     }
 
     @Test fun fileCatalogRenameAndRemovalPersistWithoutTouchingOriginalUri() {

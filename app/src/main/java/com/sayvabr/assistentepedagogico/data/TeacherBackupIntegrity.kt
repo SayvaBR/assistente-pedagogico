@@ -1,6 +1,7 @@
 package com.sayvabr.assistentepedagogico.data
 
 import org.json.JSONObject
+import java.time.LocalDate
 import java.time.LocalTime
 
 /** Semantic validation before the restore transaction replaces any records. */
@@ -94,6 +95,69 @@ internal object TeacherBackupIntegrity {
                 }
             }
         }
+
+        if (root.has("attendanceSessions")) {
+            val markByKey = mutableMapOf<Triple<Long, Long, String>, String>()
+            for (index in 0 until attendance.length()) {
+                val mark = attendance.getJSONObject(index)
+                val key = Triple(mark.getLong("classroomId"), mark.getLong("studentId"), mark.getString("date"))
+                require(markByKey.put(key, mark.getString("status")) == null) {
+                    "Backup contém marcações de frequência repetidas."
+                }
+            }
+            val sessionIds = mutableSetOf<Long>()
+            val sessionDays = mutableSetOf<Pair<Long, String>>()
+            val representedMarks = mutableSetOf<Triple<Long, Long, String>>()
+            val sessions = root.getJSONArray("attendanceSessions")
+            for (index in 0 until sessions.length()) {
+                val session = sessions.getJSONObject(index)
+                val sessionId = session.getLong("id")
+                val classroomId = session.getLong("classroomId")
+                val day = LocalDate.parse(session.getString("date")).toString()
+                require(sessionId > 0 && sessionIds.add(sessionId)) {
+                    "Backup contém sessões de frequência com IDs inválidos ou repetidos."
+                }
+                require(classroomId in knownClassrooms && sessionDays.add(classroomId to day)) {
+                    "Backup contém chamada vinculada a turma inexistente ou repetida no mesmo dia."
+                }
+                require(session.has("rosterComplete") && session.get("rosterComplete") is Boolean) {
+                    "Backup contém estado de lista de chamada inválido."
+                }
+                val members = session.optJSONArray("members")
+                    ?: throw IllegalArgumentException("Backup contém uma sessão sem participantes.")
+                require(members.length() > 0) { "Backup contém uma sessão de chamada vazia." }
+                val memberIds = mutableSetOf<Long>()
+                for (memberIndex in 0 until members.length()) {
+                    val member = members.getJSONObject(memberIndex)
+                    val studentId = member.getLong("studentId")
+                    val name = member.getString("studentName").trim()
+                    val status = member.getString("status")
+                    require(studentId > 0 && memberIds.add(studentId) && name.isNotEmpty() && status in setOf("P", "F", "?")) {
+                        "Backup contém participante de chamada inválido ou repetido."
+                    }
+                    val currentOwner = studentClassrooms[studentId]
+                    require(currentOwner == null || currentOwner == classroomId) {
+                        "Participante de chamada vinculado a outra turma."
+                    }
+                    val markKey = Triple(classroomId, studentId, day)
+                    if (status == "P" || status == "F") {
+                        if (currentOwner != null) require(markByKey[markKey] == status) {
+                            "Chamada e marcação de frequência divergentes no backup."
+                        }
+                        if (markByKey[markKey] != null) require(markByKey[markKey] == status)
+                        representedMarks += markKey
+                    } else {
+                        require(markByKey[markKey] == null) {
+                            "Participante pendente também aparece marcado no backup."
+                        }
+                    }
+                }
+            }
+            require(markByKey.keys.all { it in representedMarks }) {
+                "Backup contém frequência sem uma sessão correspondente."
+            }
+        }
+
         val lessonOwners = mutableMapOf<Long, Long>()
         for (index in 0 until lessons.length()) {
             val lesson = lessons.getJSONObject(index)

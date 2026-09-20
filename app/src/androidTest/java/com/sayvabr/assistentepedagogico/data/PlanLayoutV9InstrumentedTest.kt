@@ -49,7 +49,7 @@ class PlanLayoutV9InstrumentedTest {
 
     @Test fun freshInstallStoresIndependentLayoutAndTemplateAcrossReopenAndDuplicate() {
         val s = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, s.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, s.readableDatabase.version)
         val classroom = s.createClass("Turma sintética", "Ensino Fundamental", "Matutino")
         val layout = customLayout()
         val lesson = s.createComposedLesson(classroom, sample(), layout)
@@ -107,7 +107,7 @@ class PlanLayoutV9InstrumentedTest {
         s.close()
         store = TeacherStore(context)
         val upgraded = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, upgraded.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, upgraded.readableDatabase.version)
         assertEquals(lessonId, upgraded.read().lessons.single().id)
         assertEquals(PlanComposition.standard(), upgraded.lessonComposition(classroom, lessonId))
         assertTrue(upgraded.planTemplates().isEmpty())

@@ -77,7 +77,7 @@ class TeacherBackupV7ActivitiesInstrumentedTest {
         s.close()
         store = TeacherStore(context)
         val reopened = requireNotNull(store)
-        assertEquals(PlanLayoutV9.VERSION, reopened.readableDatabase.version)
+        assertEquals(AttendanceV10.VERSION, reopened.readableDatabase.version)
         assertEquals(initial, reopened.listActivities(f.classroom).toSet())
         assertEquals(2, reopened.read().lessons.size)
     }

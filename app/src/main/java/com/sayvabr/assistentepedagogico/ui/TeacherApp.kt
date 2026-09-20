@@ -568,7 +568,12 @@ fun TeacherApp(store: TeacherStore) {
     }
     Spacer(Modifier.height(20.dp))
     Subtitle("Para resolver agora")
-    ActionTile(ApGlyphKind.USERS, "Fazer chamada", "${classroom.name} • ${overview.attendanceMarked}/${overview.studentCount} registros hoje") { go("attendance") }
+    val attendanceSummary = if (overview.attendanceRosterComplete == false) {
+        "${classroom.name} • ${overview.attendanceMarked} registros preservados · lista incompleta"
+    } else {
+        "${classroom.name} • ${overview.attendanceMarked}/${overview.studentCount} registros hoje"
+    }
+    ActionTile(ApGlyphKind.USERS, "Fazer chamada", attendanceSummary) { go("attendance") }
     ActionTile(ApGlyphKind.DOCUMENT, "Registrar observação", "Guarde o contexto da aula") { go("observation") }
     ActionTile(ApGlyphKind.CALENDAR, "Planejar aula", "Organize seu dia") { go("planning") }
     ActionTile(ApGlyphKind.CALENDAR, "Ver compromissos", "Agenda do dia") { go("agenda") }
@@ -680,10 +685,13 @@ fun TeacherApp(store: TeacherStore) {
 }
 
 @Composable private fun AttendanceEditor(data: TeacherSnapshot, classroom: Classroom, day: String, onDay: (String) -> Unit, onBack: () -> Unit, onAddStudent: () -> Unit, onSave: (Map<Long, String>) -> Unit, onDirty: () -> Unit = {}) {
-    val students = data.students.filter { it.classroomId == classroom.id }
-    val draft = remember(classroom.id, day, data.attendance) {
+    val enrolledStudents = data.students.filter { it.classroomId == classroom.id }
+    val session = data.attendanceSessions.firstOrNull { it.classroomId == classroom.id && it.date == day }
+    val students = session?.members?.map { Student(it.studentId, classroom.id, it.studentName) } ?: enrolledStudents
+    val draft = remember(classroom.id, day, session, data.attendance) {
         mutableStateMapOf<Long, String>().apply {
-            students.forEach { student -> this[student.id] = data.attendance.firstOrNull { it.studentId == student.id && it.date == day }?.status ?: "?" }
+            if (session != null) session.members.forEach { this[it.studentId] = it.status }
+            else students.forEach { student -> this[student.id] = "?" }
         }
     }
     Heading("Frequência", classroom.name, onBack)
@@ -699,6 +707,12 @@ fun TeacherApp(store: TeacherStore) {
         }
     }
     Spacer(Modifier.height(16.dp))
+    if (session != null && !session.rosterComplete) {
+        Panel {
+            Text("Esta chamada antiga não guardava a lista completa. Os nomes e as marcações abaixo são os únicos dados históricos preservados.", color = ink)
+        }
+        Spacer(Modifier.height(12.dp))
+    }
     if (students.isEmpty()) {
         Panel { Text("Cadastre alunos nesta turma antes de fazer a chamada.", color = ink) }
         Spacer(Modifier.height(12.dp)); PrimaryButton("Adicionar alunos", click = onAddStudent)
