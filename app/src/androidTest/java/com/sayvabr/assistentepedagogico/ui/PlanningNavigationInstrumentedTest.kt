@@ -57,17 +57,30 @@ class PlanningNavigationInstrumentedTest {
         compose.onNodeWithText("Adicionar aula").assertExists()
     }
 
+    private fun clickVisibleEditorBack() {
+        compose.onNodeWithContentDescription("Voltar")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+    }
+
+    private fun enterLessonTitle(value: String) {
+        compose.onNode(hasSetTextAction() and hasText("Título da aula"))
+            .performScrollTo()
+            .performTextInput(value)
+        compose.onNodeWithText(value).assertExists()
+    }
+
     @Test fun unsavedLessonBackRequiresConfirmationAndCanKeepEditingOrDiscard() {
         openPlanning()
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
         compose.onNodeWithText("Novo plano de aula").assertExists()
-        // Models are collapsed by default: the first editable input is the actual lesson title.
-        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Plano totalmente fictício")
-        compose.onNodeWithContentDescription("Voltar").performClick()
+        enterLessonTitle("Plano totalmente fictício")
+        clickVisibleEditorBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Plano totalmente fictício").assertExists()
-        compose.onNodeWithContentDescription("Voltar").performClick()
+        clickVisibleEditorBack()
         compose.onNodeWithText("Descartar").performClick()
         compose.onNodeWithText("Adicionar aula").assertExists()
         assertTrue(requireNotNull(store).read().lessons.isEmpty())
@@ -89,10 +102,10 @@ class PlanningNavigationInstrumentedTest {
         val restoration = StateRestorationTester(compose)
         openPlanning(restoration)
         compose.onNodeWithText("Adicionar aula").performScrollTo().performClick()
-        compose.onAllNodes(hasSetTextAction())[0].performTextInput("Rascunho após rotação")
+        enterLessonTitle("Rascunho após rotação")
         restoration.emulateSavedInstanceStateRestore()
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Rascunho após rotação").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithContentDescription("Voltar").performClick()
+        clickVisibleEditorBack()
         compose.onNodeWithText("Descartar alterações?").assertExists()
         compose.onNodeWithText("Continuar editando").performClick()
         compose.onNodeWithText("Rascunho após rotação").assertExists()
