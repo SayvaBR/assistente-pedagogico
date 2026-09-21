@@ -66,6 +66,7 @@ fun TeacherApp(store: TeacherStore) {
     var classDetailSection by rememberSaveable { mutableStateOf("Visão do dia") }
     var classStudentSearch by rememberSaveable { mutableStateOf("") }
     var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }
+    var observationStudentFilter by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
     var selectedAppointment by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedLesson by rememberSaveable { mutableLongStateOf(-1L) }
@@ -238,20 +239,39 @@ fun TeacherApp(store: TeacherStore) {
                         go = {
                             classDetailSection = when (it) {
                                 "attendance", "attendanceHistory" -> "Frequência"
-                                "addStudent", "addStudents", "editStudent" -> "Alunos"
+                                "addStudent", "addStudents", "editStudent", "studentDetail" -> "Alunos"
                                 "observation", "observationHistory", "editObservation" -> "Registros"
                                 else -> "Visão do dia"
                             }
+                            if (it == "observationHistory") observationStudentFilter = -1L
+                            if (it == "observation") selectedStudent = -1L
                             if (it == "attendance") selectedDay = today()
                             requestNavigate(it)
                         },
-                        onStudent = { selectedStudent = it; classDetailSection = "Alunos"; requestNavigate("editStudent") },
+                        onStudent = { selectedStudent = it; classDetailSection = "Alunos"; requestNavigate("studentDetail") },
                         onObservation = { selectedObservation = it; classDetailSection = "Registros"; requestNavigate("editObservation") })
+                    "studentDetail" -> if (currentClass != null) {
+                        val student = snapshot.students.firstOrNull {
+                            it.id == selectedStudent && it.classroomId == currentClass.id
+                        }
+                        if (student == null) {
+                            Heading("Aluno indisponível", currentClass.name, { requestBack() })
+                            Panel { Text("Este cadastro não está mais disponível nesta turma.", color = ink) }
+                        } else StudentOverviewScreen(
+                            snapshot, currentClass, student,
+                            displayName = studentLabel(snapshot.students, student),
+                            onBack = { requestBack() },
+                            onEdit = { requestNavigate("editStudent") },
+                            onNewObservation = { selectedStudent = student.id; requestNavigate("observation") },
+                            onAllObservations = { observationStudentFilter = student.id; requestNavigate("observationHistory") },
+                            onOpenObservation = { selectedObservation = it; requestNavigate("editObservation") },
+                        )
+                    }
                     "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
                         it.id == selectedStudent && it.classroomId == currentClass.id
                     }?.let { student -> StudentEditForm(student, currentClass, displayName = studentLabel(snapshot.students, student),
                         back = { requestBack() },
-                        save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
+                        save = { name -> commit(returnToPreviousScreen("classDetail")) { store.updateStudent(currentClass.id, student.id, name) } },
                         delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } },
                         onDirty = { formDirty = true }) }
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { requestBack() },
@@ -271,12 +291,14 @@ fun TeacherApp(store: TeacherStore) {
                         onDirty = { formDirty = true })
                     "observationHistory" -> if (currentClass != null) ObservationHistoryScreen(
                         snapshot, currentClass, onBack = { back() },
-                        onNew = { requestNavigate("observation") },
-                        onOpen = { selectedObservation = it; requestNavigate("editObservation") })
+                        onNew = { selectedStudent = observationStudentFilter; requestNavigate("observation") },
+                        onOpen = { selectedObservation = it; requestNavigate("editObservation") },
+                        initialStudentFilter = observationStudentFilter.takeIf { it > 0L })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { requestBack() },
                         { studentId, kind, body, share -> commit(returnToPreviousScreen("classDetail")) {
                             store.addObservation(currentClass.id, studentId, kind, body, share)
-                        } }, onDirty = { formDirty = true })
+                        } }, onDirty = { formDirty = true },
+                        initialStudentId = selectedStudent.takeIf { it > 0L })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull {
                         it.id == selectedObservation && it.classroomId == currentClass.id
                     }?.let { observation ->
@@ -750,7 +772,7 @@ fun TeacherApp(store: TeacherStore) {
                 when {
                     visibleStudents.isEmpty() -> Panel { Text("Nenhum aluno corresponde a “${studentSearch.trim()}”. Limpe a busca para ver a lista completa.", color = ink) }
                     else -> visibleStudents.forEach { student ->
-                        ActionTile(ApGlyphKind.USERS, studentLabel(data.students, student), "Consultar e editar cadastro") { onStudent(student.id) }
+                        ActionTile(ApGlyphKind.USERS, studentLabel(data.students, student), "Ver frequência, registros e cadastro") { onStudent(student.id) }
                     }
                 }
             }
@@ -1023,8 +1045,11 @@ fun TeacherApp(store: TeacherStore) {
 }
 
 @Composable private fun ObservationForm(data: TeacherSnapshot, classroom: Classroom, back: () -> Unit,
-    save: (Long?, String, String, Boolean) -> Unit, initial: Observation? = null, delete: (() -> Unit)? = null, onDirty: () -> Unit = {}) {
-    var studentId by rememberSaveable(initial?.id) { mutableLongStateOf(initial?.studentId ?: -1L) }
+    save: (Long?, String, String, Boolean) -> Unit, initial: Observation? = null, delete: (() -> Unit)? = null,
+    onDirty: () -> Unit = {}, initialStudentId: Long? = null) {
+    var studentId by rememberSaveable(initial?.id, initialStudentId) {
+        mutableLongStateOf(initial?.studentId ?: initialStudentId ?: -1L)
+    }
     var kind by rememberSaveable(initial?.id) { mutableStateOf(initial?.kind ?: "Participação") }
     var body by rememberSaveable(initial?.id) { mutableStateOf(initial?.body.orEmpty()) }
     var approved by rememberSaveable(initial?.id) { mutableStateOf(initial?.shareApproved ?: false) }
