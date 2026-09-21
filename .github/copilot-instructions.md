@@ -13,7 +13,7 @@ Kotlin/Compose, local-first SQLite; dados de cada turma devem ser validados pelo
 Executar Gradle equivalente a `gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest`; instrumentados via CI Android dedicado. Anotar SHA e links dos checks. Se não rodou, registrar pendência; CI verde não equivale a teste visual.
 
 ## UI
-Design System: `docs/DESIGN_SYSTEM.md`, tokens em `ApDesignTokens.kt`, tema em `ApTheme.kt`, componentes em `ApVisualComponents.kt`. Azul/branco, profundidade sólida, tipografia forte, sem gradientes, emoji, placeholders ou métricas fictícias. Checar captura real Android, 360/412/480dp, teclado, navegação por gestos, contraste e TalkBack conforme área alterada.
+Design System: `docs/DESIGN_SYSTEM.md`, tokens em `ApDesignTokens.kt`, tema em `ApTheme.kt`, componentes em `ApVisualComponents.kt`. Seguir as âncoras AP-01 a AP-05 e `docs/design-system/LUNA_HANDOFF.md`: títulos arredondados, ilustrações aprovadas, gradientes locais e sombras discretas permitidos. Não há mascote. Código atual ainda não implementa todo o alvo v2. Sem emojis como ícones, slogans acrescentados ou métricas fictícias. Checar captura real Android, 360/412/480dp, teclado, navegação por gestos, contraste e TalkBack conforme área alterada.
 
 ## Entrega
 PR em DRAFT com resumo de código real, testes no HEAD, screenshots reais quando houver UI, riscos/limitações, arquivos tocados e conflitos previstos. Não gerar APK só porque o CI compila; a titular suspendeu novos APKs nesta etapa. Agentes são colaboradores supervisionados, não autorizam merge ou acesso a dados por conta própria.
