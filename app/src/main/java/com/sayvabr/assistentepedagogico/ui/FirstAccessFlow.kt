@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sayvabr.assistentepedagogico.data.ClassroomRules
 import com.sayvabr.assistentepedagogico.data.TeacherStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -146,7 +147,7 @@ fun FirstAccessFlow(store: TeacherStore) {
                                 try {
                                     check(store.read().profile == null) { "Seu perfil já existe. Reabra o aplicativo." }
                                     store.saveProfile(name)
-                                    store.createClass(classroom, stage, "Não informado")
+                                    store.createClass(classroom, stage, ClassroomRules.unspecifiedShift)
                                     db.setTransactionSuccessful()
                                 } finally { db.endTransaction() }
                             } }.onSuccess { prefs.edit().clear().apply(); go("done") }

@@ -110,6 +110,7 @@ class TeacherStoreInstrumentedTest {
     @Test fun classOptionsAreValidatedOnCreateAndEditWithoutChangingSavedRecords() {
         val first = db()
         val id = first.createClass("Turma válida", "Ensino Fundamental", "Matutino")
+        val unspecifiedShiftId = first.createClass("Turma sem turno", "Educação Infantil", ClassroomRules.unspecifiedShift)
         val before = first.read().classrooms
 
         rejects { first.createClass("Etapa inválida", "Curso não suportado", "Matutino") }
@@ -117,9 +118,10 @@ class TeacherStoreInstrumentedTest {
         rejects { first.updateClass(id, "Não salvar", "Curso não suportado", "Vespertino") }
         rejects { first.updateClass(id, "Não salvar", "Ensino Fundamental", "Integral") }
         assertEquals(before, reopen().read().classrooms)
+        assertEquals(ClassroomRules.unspecifiedShift, before.single { it.id == unspecifiedShiftId }.shift)
 
         db().updateClass(id, "Turma atualizada", "Ensino Médio", "Noturno")
-        val updated = reopen().read().classrooms.single()
+        val updated = reopen().read().classrooms.single { it.id == id }
         assertEquals("Turma atualizada", updated.name)
         assertEquals("Ensino Médio", updated.stage)
         assertEquals("Noturno", updated.shift)

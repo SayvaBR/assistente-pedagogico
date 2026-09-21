@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -415,12 +416,13 @@ fun TeacherApp(store: TeacherStore) {
             focusedContainerColor = ApColors.White, unfocusedContainerColor = ApColors.White))
     Spacer(Modifier.height(10.dp))
 }
-@Composable private fun Choices(options: List<String>, current: String, pick: (String) -> Unit) {
-    options.chunked(3).forEach { chunk ->
+@Composable private fun Choices(options: List<String>, current: String, columns: Int = 3, pick: (String) -> Unit) {
+    options.chunked(columns).forEach { chunk ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             chunk.forEach { option ->
                 val chosen = option == current
-                Surface(modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget).clickable { pick(option) },
+                Surface(modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget)
+                    .selectable(selected = chosen, role = Role.RadioButton) { pick(option) },
                     shape = RoundedCornerShape(13.dp), color = if (chosen) blue else Color.White,
                     border = BorderStroke(1.dp, if (chosen) blue else outline)) {
                     Box(contentAlignment = Alignment.Center) {
@@ -527,7 +529,7 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit, initial: Classroom? = null, onDirty: () -> Unit = {}) {
     var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
     var stage by rememberSaveable(initial?.id) { mutableStateOf(initial?.stage ?: "Ensino Fundamental") }
-    var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: "Matutino") }
+    var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: ClassroomRules.unspecifiedShift) }
     Heading(if (initial == null) "Vamos criar sua turma?" else "Editar turma", if (initial == null) "Você poderá adicionar alunos depois." else "Atualize os dados da turma.", onBack)
     Panel {
         Input("Nome da turma (ex.: 5º Ano A)", name, { if (it != name) { name = it; onDirty() } })
@@ -536,7 +538,7 @@ fun TeacherApp(store: TeacherStore) {
         Choices(ClassroomRules.stages, stage) { if (it != stage) { stage = it; onDirty() } }
         Text("Turno", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Choices(ClassroomRules.shifts, shift) { if (it != shift) { shift = it; onDirty() } }
+        Choices(ClassroomRules.shifts, shift, columns = 2) { if (it != shift) { shift = it; onDirty() } }
         Spacer(Modifier.height(10.dp))
         PrimaryButton(if (initial == null) "Criar turma →" else "Salvar alterações") { onSave(name, stage, shift) }
     }

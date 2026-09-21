@@ -11,7 +11,8 @@ import java.time.LocalTime
 data class TeacherProfile(val name: String)
 object ClassroomRules {
     val stages = listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")
-    val shifts = listOf("Matutino", "Vespertino", "Noturno")
+    const val unspecifiedShift = "Não informado"
+    val shifts = listOf("Matutino", "Vespertino", "Noturno", unspecifiedShift)
 }
 data class Classroom(val id: Long, val name: String, val stage: String, val shift: String, val archived: Boolean = false)
 data class Student(val id: Long, val classroomId: Long, val name: String)
