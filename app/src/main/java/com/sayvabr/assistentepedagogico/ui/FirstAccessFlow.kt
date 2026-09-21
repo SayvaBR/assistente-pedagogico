@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,7 +106,17 @@ fun FirstAccessFlow(store: TeacherStore) {
                     TextButton(onClick = { go("login") }, modifier = Modifier.fillMaxWidth()) { Text("Já tenho uma conta", color = ApColors.Navy) }
                     Text("Você pode começar neste aparelho sem criar uma conta.", color = ApColors.Navy, fontSize = 13.sp)
                 }
-                "login", "signup" -> EntryAuth(step == "signup", { go(if (step == "signup") "login" else "signup") }, { go("name") })
+                "login", "signup" -> EntryAuth(
+                    signup = step == "signup",
+                    switch = { go(if (step == "signup") "login" else "signup") },
+                    local = { localName ->
+                        if (!localName.isNullOrBlank()) {
+                            name = localName
+                            prefs.edit().putString("name", localName).apply()
+                        }
+                        go("name")
+                    },
+                )
                 "name" -> {
                     EntryArt(ApGlyphKind.USERS)
                     EntryTitle("Como podemos\nchamar você?")
@@ -174,21 +185,119 @@ fun FirstAccessFlow(store: TeacherStore) {
     }
 }
 
-@Composable private fun EntryAuth(signup: Boolean, switch: () -> Unit, local: () -> Unit) {
+@Composable
+private fun EntryAuth(signup: Boolean, switch: () -> Unit, local: (String?) -> Unit) {
     // Credentials never enter saved state, preferences, logs or a simulated authentication session.
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    EntryTitle(if (signup) "Um espaço\npara chamar de seu." else "Que bom\nter você de volta.")
-    Text(if (signup) "Crie sua conta para entrar no seu espaço." else "Entre com seu e-mail e senha.", color = ApColors.Navy)
-    OutlinedTextField(email, { email = it }, label = { Text("E-mail") }, singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
-    OutlinedTextField(password, { password = it }, label = { Text("Senha") }, singleLine = true,
-        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
-    ApCard { Text("Contas online ainda não estão disponíveis nesta versão. Você pode preparar seu espaço neste aparelho agora.", color = ApColors.Navy) }
-    ApRaisedButton(if (signup) "Criar conta" else "Entrar", {}, enabled = false)
-    ApRaisedButton("Continuar neste aparelho", local, secondary = true)
-    TextButton(onClick = switch) { Text(if (signup) "Já tenho conta" else "Quero criar uma conta", color = ApColors.Navy) }
+    // The provider is intentionally not faked: this Android-only, local-first release has no
+    // account server yet. The form still validates inputs and gives the user a clear next step.
+    var fullName by rememberSaveable(signup) { mutableStateOf("") }
+    var email by rememberSaveable(signup) { mutableStateOf("") }
+    var password by rememberSaveable(signup) { mutableStateOf("") }
+    var passwordVisible by rememberSaveable(signup) { mutableStateOf(false) }
+    var submitted by rememberSaveable(signup) { mutableStateOf(false) }
+    var remoteMessage by remember { mutableStateOf<String?>(null) }
+
+    val normalizedEmail = email.trim()
+    val emailValid = android.util.Patterns.EMAIL_ADDRESS.matcher(normalizedEmail).matches()
+    val passwordValid = password.length >= 8
+    val canSubmit = emailValid && passwordValid && (!signup || fullName.trim().length >= 2)
+    val emailError = submitted && !emailValid
+    val passwordError = submitted && !passwordValid
+    val nameError = submitted && signup && fullName.trim().length < 2
+
+    EntryTitle(if (signup) "Criar sua conta" else "Bem-vinda de volta!")
+    Text(
+        if (signup) "É rápido e gratuito" else "Que bom ter você por aqui.",
+        color = ApColors.Navy,
+        fontSize = 16.sp,
+    )
+    if (signup) {
+        OutlinedTextField(
+            value = fullName,
+            onValueChange = { fullName = it; submitted = false },
+            label = { Text("Nome completo") },
+            placeholder = { Text("Seu nome") },
+            singleLine = true,
+            isError = nameError,
+            supportingText = if (nameError) ({ Text("Informe seu nome completo.") }) else null,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+        )
+    }
+    OutlinedTextField(
+        value = email,
+        onValueChange = { email = it; submitted = false },
+        label = { Text("E-mail") },
+        placeholder = { Text("seu@email.com") },
+        singleLine = true,
+        isError = emailError,
+        supportingText = if (emailError) ({ Text("Digite um e-mail válido.") }) else null,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+    )
+    OutlinedTextField(
+        value = password,
+        onValueChange = { password = it; submitted = false },
+        label = { Text("Senha") },
+        placeholder = { Text(if (signup) "Crie uma senha" else "Sua senha") },
+        singleLine = true,
+        isError = passwordError,
+        supportingText = if (passwordError) ({ Text("Use pelo menos 8 caracteres.") }) else null,
+        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        trailingIcon = {
+            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                Text(if (passwordVisible) "Ocultar" else "Mostrar", fontSize = 12.sp, color = ApColors.Pressed)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+    )
+    if (!signup) {
+        TextButton(
+            onClick = { remoteMessage = "A recuperação de senha online será disponibilizada quando o provedor de contas for integrado. Seus dados locais continuam acessíveis sem login." },
+            modifier = Modifier.align(Alignment.End),
+        ) { Text("Esqueceu a senha?", color = ApColors.Pressed, fontSize = 13.sp) }
+    }
+    ApRaisedButton(
+        label = if (signup) "Criar conta" else "Entrar",
+        onClick = {
+            submitted = true
+            if (canSubmit) {
+                remoteMessage = "Contas online ainda não estão disponíveis nesta versão. Para continuar agora, use o botão abaixo e prepare seu espaço neste aparelho."
+            }
+        },
+        enabled = !submitted || canSubmit,
+    )
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        HorizontalDivider(Modifier.weight(1f), color = ApPalette.Outline)
+        Text("ou", Modifier.padding(horizontal = 12.dp), color = ApColors.Navy.copy(alpha = .65f), fontSize = 13.sp)
+        HorizontalDivider(Modifier.weight(1f), color = ApPalette.Outline)
+    }
+    ApRaisedButton("Continuar neste aparelho", { local(fullName.trim().ifBlank { null }) }, secondary = true)
+    TextButton(
+        onClick = { remoteMessage = "Login com Google estará disponível quando as contas online forem integradas. Você pode começar sem conta neste aparelho." },
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text("Continuar com Google", color = ApColors.Pressed) }
+    Text(
+        "Este app funciona no Android sem conta e sem enviar dados pedagógicos para servidores.",
+        color = ApColors.Navy.copy(alpha = .72f),
+        fontSize = 12.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    TextButton(onClick = switch, modifier = Modifier.fillMaxWidth()) {
+        Text(if (signup) "Já tem uma conta? Entrar" else "Criar uma conta", color = ApColors.Pressed)
+    }
+    remoteMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { remoteMessage = null },
+            title = { Text("Contas online") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = { remoteMessage = null }) { Text("Entendi") } },
+        )
+    }
 }
 
 @Composable private fun EntryTitle(text: String) {
