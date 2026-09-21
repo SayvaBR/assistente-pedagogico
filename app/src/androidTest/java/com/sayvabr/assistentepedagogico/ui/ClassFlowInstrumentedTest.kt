@@ -96,7 +96,7 @@ class ClassFlowInstrumentedTest {
 
         compose.onNodeWithText("Fazer chamada de hoje").assertExists()
         compose.onNodeWithText("Acessos rápidos").assertExists()
-        compose.onNodeWithText("Alunos").performClick()
+        compose.onAllNodesWithText("Alunos").onFirst().performClick()
         compose.onNodeWithText("Adicionar aluno").assertExists()
         compose.onNodeWithText("Acessos rápidos").assertDoesNotExist()
         compose.onNodeWithText("Fazer chamada de hoje").assertDoesNotExist()
@@ -155,6 +155,7 @@ class ClassFlowInstrumentedTest {
         openApp()
         compose.onAllNodesWithText("Turmas").onLast().performClick()
         compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+        compose.onAllNodesWithText("Alunos").onFirst().performClick()
 
         compose.onNodeWithText("Colar lista").performScrollTo().performClick()
         compose.onNodeWithText("Nomes dos alunos").performTextInput("Ana Silva\n\nBruno Souza\nAna Silva")
@@ -179,7 +180,7 @@ class ClassFlowInstrumentedTest {
         openApp()
         compose.onAllNodesWithText("Turmas").onLast().performClick()
         compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
-        compose.onNodeWithText("Alunos").performClick()
+        compose.onAllNodesWithText("Alunos").onFirst().performClick()
 
         compose.onNodeWithText("Buscar aluno pelo nome").performScrollTo().performTextInput("Estudante 9")
         compose.onAllNodesWithText("Estudante 9", substring = true).onLast().assertExists()

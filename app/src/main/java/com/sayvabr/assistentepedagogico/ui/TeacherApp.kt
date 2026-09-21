@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.selection.selectable
@@ -76,7 +77,7 @@ fun TeacherApp(store: TeacherStore) {
     var pendingDiscardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    val screenScrollState = rememberScrollState()
+    val screenScrollState = rememberSaveable(screen, classDetailSection, saver = ScrollState.Saver) { ScrollState(0) }
 
     val rootDestinations = setOf("home", "planning", "classes", "files", "more")
     fun synchronizeTab(destination: String) {
@@ -125,10 +126,6 @@ fun TeacherApp(store: TeacherStore) {
         formDirty = false
         confirmDiscard = false
         pendingDiscardAction = null
-        screenScrollState.scrollTo(0)
-    }
-    LaunchedEffect(classDetailSection) {
-        if (screen == "classDetail") screenScrollState.scrollTo(0)
     }
 
     fun afterSave(destination: String) {
@@ -766,10 +763,8 @@ fun TeacherApp(store: TeacherStore) {
             } else {
                 ApRaisedButton("Fazer chamada de hoje", { go("attendance") }, glyph = ApGlyphKind.CALENDAR)
             }
-            if (sessions.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
-            }
+            Spacer(Modifier.height(10.dp))
+            ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
             Spacer(Modifier.height(8.dp)); Subtitle("Última chamada")
             val latest = sessions.firstOrNull()
             if (latest == null) {
