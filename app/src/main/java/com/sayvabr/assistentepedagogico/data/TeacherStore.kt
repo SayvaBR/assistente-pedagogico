@@ -149,6 +149,20 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
         writableDatabase.insertWithOnConflict("profile", null, values("id" to 1, "name" to name.trim()), SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    /** Explicit privacy action: remove every local pedagogical record in one transaction. */
+    fun clearAllData() {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            listOf(
+                "lesson_layouts", "plan_templates", "lesson_activities", "attendance_session_members",
+                "attendance_sessions", "attendance", "observations", "lessons", "students", "appointments",
+                "saved_files", "file_folders", "classrooms", "profile",
+            ).forEach { db.delete(it, null, null) }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
     fun createClass(name: String, stage: String, shift: String): Long {
         require(name.isNotBlank()) { "Informe o nome da turma." }
         require(stage in ClassroomRules.stages) { "Selecione a etapa de ensino." }
