@@ -79,6 +79,14 @@ def device_height():
     return int(matches[-1][1])
 
 
+def device_width():
+    text = adb('shell', 'wm', 'size')
+    matches = re.findall(r'(\d+)x(\d+)', text)
+    if not matches:
+        raise RuntimeError(f'Cannot obtain screen resolution: {text}')
+    return int(matches[-1][0])
+
+
 def tap_tab(label):
     """Select an exact label within the bottom bar and tap its clickable ancestor.
 
@@ -102,6 +110,34 @@ def tap_tab(label):
     if not candidates:
         raise RuntimeError(f'Bottom tab {label!r} not found in the bottom 27% of the display')
     tap(max(candidates, key=lambda pair: pair[0])[1])
+
+
+def tap_detail_tab(label):
+    root, _ = hierarchy()
+    target = next((node for node in root.iter('node') if node.get('text', '').casefold() == label.casefold()), None)
+    width = device_width()
+    direction = (24, width - 24) if label.casefold() == 'visão do dia' else (width - 24, 24)
+    if target is not None:
+        x1, y1, x2, y2 = bounds(target)
+        center_x = (x1 + x2) // 2
+        if 0 <= center_x < width:
+            tap(target)
+            return
+        if center_x < 0:
+            direction = (24, width - 24)
+
+    # The detail tabs intentionally scroll horizontally on narrow phones.
+    root, _ = hierarchy()
+    anchor = next((node for node in root.iter('node') if node.get('text', '').casefold() in {
+        'visão do dia', 'alunos', 'frequência', 'registros',
+    }), None)
+    if anchor is None:
+        raise RuntimeError('Could not locate the class detail tab row')
+    _, y1, _, y2 = bounds(anchor)
+    center_y = (y1 + y2) // 2
+    adb('shell', 'input', 'swipe', str(direction[0]), str(center_y), str(direction[1]), str(center_y), '350')
+    time.sleep(.5)
+    tap_text(label, exact=True)
 
 
 def visible_anchor(root, anchor):
@@ -195,11 +231,11 @@ try:
     tap_text('Salvar aluno', exact=True)
     wait_for_text('EstudanteTeste')
     screenshot('07-turma-com-aluno')
-    tap_text('Frequência', exact=True)
+    tap_detail_tab('Frequência')
     screenshot('08-frequencia-turma')
-    tap_text('Registros', exact=True)
+    tap_detail_tab('Registros')
     screenshot('09-registros-turma')
-    tap_text('Visão do dia', exact=True)
+    tap_detail_tab('Visão do dia')
     tap_text('Fazer chamada de hoje', exact=True)
     wait_for_text('Pendentes')
     screenshot('10-fazer-chamada')
