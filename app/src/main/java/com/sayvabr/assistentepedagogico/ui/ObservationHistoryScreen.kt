@@ -36,10 +36,13 @@ fun ObservationHistoryScreen(
     onBack: () -> Unit,
     onNew: () -> Unit,
     onOpen: (Long) -> Unit,
+    initialStudentFilter: Long? = null,
 ) {
     var query by rememberSaveable(classroom.id) { mutableStateOf("") }
     var category by rememberSaveable(classroom.id) { mutableStateOf("Todas") }
-    var studentFilter by rememberSaveable(classroom.id) { mutableLongStateOf(-1L) }
+    var studentFilter by rememberSaveable(classroom.id, initialStudentFilter) {
+        mutableLongStateOf(initialStudentFilter ?: -1L)
+    }
     val students = data.students.filter { it.classroomId == classroom.id }
     val names = students.associate { it.id to it.name }
     val notes = data.observations.filter { it.classroomId == classroom.id }
