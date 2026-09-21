@@ -60,7 +60,7 @@ class MoreFlowInstrumentedTest {
         compose.onAllNodesWithText("Mais").onLast().performClick()
         listOf("Conta e perfil", "Notificações", "Turmas", "Aparência", "Idioma",
             "Privacidade e segurança", "Sincronização e backup", "Sobre o app", "Sair da conta")
-            .forEach { compose.onNodeWithText(it).assertExists() }
+            .forEach { compose.onAllNodesWithText(it, substring = false).onLast().assertExists() }
 
         compose.onNodeWithText("Notificações").performScrollTo().performClick()
         compose.onNodeWithText("Alertas, lembretes e comunicados").assertExists()
@@ -90,7 +90,7 @@ class MoreFlowInstrumentedTest {
         compose.onAllNodesWithText("Mais").onLast().performClick()
         compose.onNodeWithText("Privacidade e segurança").performScrollTo().performClick()
         compose.onNodeWithText("Excluir tudo").performClick()
-        compose.onNodeWithText("Esta ação remove os dados locais e não pode ser desfeita.").assertExists()
+        compose.onNodeWithText("Excluir todos os dados?").assertExists()
         compose.onNodeWithText("Cancelar").performClick()
         compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("Conta e perfil").assertExists()
