@@ -31,16 +31,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-enum class ApGlyphKind { DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLDER, HOME, CALENDAR, USERS, MORE, STAR, RESTORE, PLUS, CHECK, CLOCK, NOTE }
+enum class ApGlyphKind { DOCUMENT, SEARCH, BACK, CHEVRON, IMPORT, OPEN, EDIT, TRASH, FOLDER, HOME, CALENDAR, USERS, MORE, STAR, RESTORE, PLUS, CHECK, CLOCK, NOTE }
 
 @Composable fun ApGlyph(kind: ApGlyphKind, modifier: Modifier = Modifier.size(24.dp), color: Color = ApColors.Navy) {
     Canvas(modifier) {
-        val u = size.minDimension; val w = u * .085f; val line = Stroke(width = w, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val u = size.minDimension; val w = u * .07f; val line = Stroke(width = w, cap = StrokeCap.Round, join = StrokeJoin.Round)
         fun segment(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, Offset(x1*u,y1*u), Offset(x2*u,y2*u), strokeWidth=w, cap=StrokeCap.Round)
         when(kind) {
             ApGlyphKind.DOCUMENT, ApGlyphKind.NOTE -> { drawRoundRect(color, Offset(.24f*u,.12f*u), Size(.52f*u,.75f*u), CornerRadius(.07f*u), style=line); segment(.34f,.46f,.66f,.46f); segment(.34f,.60f,.66f,.60f) }
             ApGlyphKind.SEARCH -> { drawCircle(color,.245f*u,Offset(.42f*u,.42f*u),style=line); segment(.60f,.61f,.85f,.86f) }
             ApGlyphKind.BACK -> { segment(.65f,.18f,.34f,.50f); segment(.34f,.50f,.65f,.82f) }
+            ApGlyphKind.CHEVRON -> { segment(.38f,.25f,.63f,.50f); segment(.63f,.50f,.38f,.75f) }
             ApGlyphKind.IMPORT -> { segment(.50f,.12f,.50f,.67f); segment(.28f,.47f,.50f,.69f); segment(.50f,.69f,.72f,.47f); segment(.19f,.84f,.81f,.84f) }
             ApGlyphKind.OPEN -> { drawRoundRect(color,Offset(.13f*u,.29f*u),Size(.56f*u,.57f*u),CornerRadius(.08f*u),style=line); segment(.50f,.13f,.87f,.13f); segment(.87f,.13f,.87f,.50f); segment(.87f,.13f,.45f,.55f) }
             ApGlyphKind.EDIT -> { segment(.23f,.70f,.66f,.27f); segment(.32f,.80f,.75f,.37f); segment(.23f,.70f,.19f,.84f); segment(.19f,.84f,.32f,.80f) }
@@ -75,7 +76,7 @@ enum class ApGlyphKind { DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLD
     Box(modifier.fillMaxWidth().height(60.dp).background(if(enabled)bottom else ApPalette.DisabledSurface,shape).padding(bottom=depth,top=5.dp-depth)) {
         Button(onClick=onClick,enabled=enabled,interactionSource=interaction,modifier=Modifier.fillMaxSize().then(faceModifier).semantics{contentDescription=label},shape=shape,colors=ButtonDefaults.buttonColors(containerColor=Color.Transparent,contentColor=if(secondary)ApPalette.Action else ApPalette.White,disabledContainerColor=Color.Transparent,disabledContentColor=ApPalette.DisabledText),elevation=ButtonDefaults.buttonElevation(defaultElevation=0.dp,pressedElevation=0.dp,disabledElevation=0.dp),contentPadding=PaddingValues(horizontal=20.dp)) {
             if(glyph!=null){ApGlyph(glyph,Modifier.size(24.dp),if(secondary)ApPalette.Action else ApPalette.White);Spacer(Modifier.width(8.dp))}
-            Text(label,fontSize=16.sp,lineHeight=20.sp,fontWeight=FontWeight.ExtraBold,maxLines=2,overflow=TextOverflow.Ellipsis)
+            Text(label,fontSize=16.sp,lineHeight=20.sp,fontWeight=FontWeight.Bold,maxLines=2,overflow=TextOverflow.Ellipsis)
         }
     }
 }

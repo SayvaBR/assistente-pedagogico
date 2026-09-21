@@ -420,13 +420,13 @@ fun TeacherApp(store: TeacherStore) {
             Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, color = ink, fontSize = 25.sp, lineHeight = 29.sp, fontWeight = FontWeight.Black)
+            Text(title, color = ink, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold)
             if (subtitle != null) Text(subtitle, color = ink.copy(alpha = .72f), fontSize = 14.sp)
         }
     }
     Spacer(Modifier.height(20.dp))
 }
-@Composable private fun Subtitle(label: String) { Text(label, color = ink, fontSize = 20.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(12.dp)) }
+@Composable private fun Subtitle(label: String) { Text(label, color = ink, fontSize = 18.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(12.dp)) }
 @Composable private fun Input(label: String, value: String, change: (String) -> Unit, multiline: Boolean = false) {
     OutlinedTextField(value = value, onValueChange = change, modifier = Modifier.fillMaxWidth(), label = { Text(label) },
         shape = RoundedCornerShape(ApShapeToken.Medium), minLines = if (multiline) 3 else 1, maxLines = if (multiline) 6 else 1,
@@ -456,10 +456,12 @@ fun TeacherApp(store: TeacherStore) {
 }
 @Composable private fun NavItem(label: String, glyph: ApGlyphKind, selected: Boolean, modifier: Modifier, click: () -> Unit) {
     Column(modifier.heightIn(min = 64.dp).clickable(onClick = click).padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        ApGlyph(glyph, Modifier.size(25.dp), if (selected) blue else ink.copy(alpha = .48f))
+        Box(Modifier.width(48.dp).height(32.dp).background(if (selected) ApPalette.LightSurface else Color.Transparent, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            ApGlyph(glyph, Modifier.size(22.dp), if (selected) ApPalette.Action else ink.copy(alpha = .64f))
+        }
         Spacer(Modifier.height(3.dp))
         Text(label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Black else FontWeight.Bold,
-            color = if (selected) blue else ink.copy(alpha = .62f), maxLines = 1)
+            color = if (selected) ApPalette.Action else ink.copy(alpha = .70f), maxLines = 1)
     }
 }
 @Composable private fun BottomBar(selected: String, pick: (String) -> Unit) {
@@ -478,14 +480,15 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun ActionTile(glyph: ApGlyphKind, title: String, detail: String = "", click: () -> Unit) {
     Surface(modifier = Modifier.fillMaxWidth().clickable(onClick = click), shape = RoundedCornerShape(ApShapeToken.Card),
         color = Color.White, border = BorderStroke(1.dp, outline)) {
-        Row(Modifier.padding(ApSpace.Base), verticalAlignment = Alignment.CenterVertically) {
-            ApIconBadge(glyph)
+        Row(Modifier.padding(horizontal = ApSpace.Base, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).background(ApPalette.LightSurface, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { ApGlyph(glyph, Modifier.size(23.dp), ApPalette.Action) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-                if (detail.isNotEmpty()) Text(detail, color = ink.copy(alpha = .68f), fontSize = 12.sp)
+                Text(title, color = ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 21.sp)
+                if (detail.isNotEmpty()) { Spacer(Modifier.height(3.dp)); Text(detail, color = ink.copy(alpha = .68f), fontSize = 12.sp, lineHeight = 18.sp) }
             }
-            ApGlyph(ApGlyphKind.OPEN, Modifier.size(20.dp), blue)
+            Spacer(Modifier.width(8.dp))
+            ApGlyph(ApGlyphKind.CHEVRON, Modifier.size(18.dp), ink.copy(alpha = .48f))
         }
     }
     Spacer(Modifier.height(9.dp))

@@ -144,7 +144,7 @@ fun FileCatalogScreen(
             }
         }
     } else {
-        ApEyebrow("Seu espaço de trabalho")
+        ApEyebrow("Seu espaço de trabalho", onPrimary = false)
         Spacer(Modifier.height(3.dp))
         Text("Arquivos", fontSize = 32.sp, lineHeight = 38.sp, fontWeight = FontWeight.Black, color = ApColors.Navy)
         Text("Organize materiais sem alterar os originais.", color = ApColors.Navy, fontSize = 14.sp)

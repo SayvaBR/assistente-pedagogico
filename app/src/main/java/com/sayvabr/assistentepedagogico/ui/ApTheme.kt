@@ -26,7 +26,7 @@ object ApColors {
  * light theme (observed on Files filter chips in real Android screenshots).
  */
 private val apColorScheme = lightColorScheme(
-    primary = ApPalette.Primary,
+    primary = ApPalette.Action,
     onPrimary = ApPalette.White,
     primaryContainer = ApPalette.LightSurface,
     onPrimaryContainer = ApPalette.Navy,
@@ -45,7 +45,7 @@ private val apColorScheme = lightColorScheme(
     surfaceTint = ApPalette.Primary,
     outline = ApPalette.Outline,
     surfaceVariant = ApPalette.LightSurface,
-    onSurfaceVariant = ApPalette.Navy,
+    onSurfaceVariant = ApPalette.Navy.copy(alpha = .72f),
 )
 
 private val apShapes = Shapes(
@@ -57,9 +57,9 @@ private val apShapes = Shapes(
 )
 
 private val apTypography = Typography(
-    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Black),
-    titleLarge = TextStyle(fontSize = 23.sp, lineHeight = 29.sp, fontWeight = FontWeight.ExtraBold),
-    titleMedium = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.ExtraBold),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontSize = 23.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold),
     bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 23.sp, fontWeight = FontWeight.Medium),
     bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium),
     labelLarge = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold),
