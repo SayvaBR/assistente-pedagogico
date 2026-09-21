@@ -222,10 +222,12 @@ fun TeacherApp(store: TeacherStore) {
                         onDirty = { formDirty = true })
                     "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
                         back = { back() }, archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
-                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, {
-                        if (it == "attendance") selectedDay = today()
-                        requestNavigate(it)
-                    },
+                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass,
+                        back = { requestBack() },
+                        go = {
+                            if (it == "attendance") selectedDay = today()
+                            requestNavigate(it)
+                        },
                         onStudent = { selectedStudent = it; requestNavigate("editStudent") },
                         onObservation = { selectedObservation = it; requestNavigate("editObservation") })
                     "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
@@ -388,7 +390,9 @@ fun TeacherApp(store: TeacherStore) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (back != null) {
             Surface(
-                modifier = Modifier.size(46.dp).clickable(onClick = back),
+                modifier = Modifier.size(48.dp)
+                    .clickable(role = Role.Button, onClick = back)
+                    .semantics { contentDescription = "Voltar" },
                 color = ApColors.White,
                 shape = RoundedCornerShape(15.dp),
                 border = BorderStroke(1.dp, outline),
@@ -622,8 +626,8 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit, onObservation: (Long) -> Unit) {
-    Heading(classroom.name, "${data.students.count { it.classroomId == classroom.id }} alunos • ${classroom.stage}", { go("classes") })
+@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, back: () -> Unit, go: (String) -> Unit, onStudent: (Long) -> Unit, onObservation: (Long) -> Unit) {
+    Heading(classroom.name, "${data.students.count { it.classroomId == classroom.id }} alunos • ${classroom.stage}", back)
     PrimaryButton("Fazer chamada de hoje") { go("attendance") }
     Spacer(Modifier.height(18.dp)); Subtitle("Acompanhar")
     ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }

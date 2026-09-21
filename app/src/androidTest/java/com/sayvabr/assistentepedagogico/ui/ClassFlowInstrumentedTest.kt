@@ -2,9 +2,10 @@ package com.sayvabr.assistentepedagogico.ui
 
 import android.content.Context
 import android.os.Build
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.sayvabr.assistentepedagogico.data.TeacherStore
@@ -19,7 +20,7 @@ import org.junit.runner.RunWith
 /** Synthetic classroom journey: a Home shortcut should save and return to its originating screen. */
 @RunWith(AndroidJUnit4::class)
 class ClassFlowInstrumentedTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private lateinit var context: Context
     private var store: TeacherStore? = null
     private var emulator = false
@@ -42,7 +43,7 @@ class ClassFlowInstrumentedTest {
         if (emulator) context.deleteDatabase("pedagogico.db")
     }
 
-    @Test fun attendanceStartedFromHomeSavesAndReturnsToHome() {
+    private fun openApp() {
         val database = requireNotNull(store)
         compose.setContent {
             ApTheme {
@@ -54,6 +55,11 @@ class ClassFlowInstrumentedTest {
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText("Olá, Docente!").fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    @Test fun attendanceStartedFromHomeSavesAndReturnsToHome() {
+        val database = requireNotNull(store)
+        openApp()
 
         compose.onNodeWithText("Fazer chamada").performScrollTo().performClick()
         compose.onNodeWithText("Frequência").assertExists()
@@ -65,5 +71,21 @@ class ClassFlowInstrumentedTest {
         }
         compose.onNodeWithText("Olá, Docente!").assertExists()
         assertEquals("P", database.read().attendanceSessions.single().members.single().status)
+    }
+
+    @Test fun androidBackAndClassDetailArrowReturnToTheClassListOneStepAtATime() {
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Suas turmas").assertExists()
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+        compose.onNodeWithText("Fazer chamada de hoje").assertExists()
+
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Suas turmas").assertExists()
+
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Voltar").performClick()
+        compose.onNodeWithText("Suas turmas").assertExists()
     }
 }
