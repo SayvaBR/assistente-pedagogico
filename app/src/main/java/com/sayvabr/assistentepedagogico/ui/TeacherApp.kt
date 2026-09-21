@@ -19,6 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +45,10 @@ private val red = ApColors.Navy
 private val brDate = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))
 private fun friendlyDay(day: String) = LocalDate.parse(day).format(brDate).replaceFirstChar { it.uppercase() }
 private fun today() = LocalDate.now().toString()
+private fun studentLabel(allStudents: List<Student>, student: Student): String =
+    if (allStudents.count { it.classroomId == student.classroomId && it.name.equals(student.name, ignoreCase = true) } > 1) {
+        "${student.name} · cadastro ${student.id}"
+    } else student.name
 
 /** Working offline product slice; navigation points only to implemented screens. */
 @Composable
@@ -106,6 +113,7 @@ fun TeacherApp(store: TeacherStore) {
     fun requestBack() = guardDiscard { back() }
     fun requestNavigate(destination: String, root: Boolean = false) = guardDiscard { navigate(destination, root) }
     fun requestDay(day: String) = guardDiscard { selectedDay = day }
+    fun returnToPreviousScreen(defaultDestination: String) = backStack.lastOrNull() ?: defaultDestination
 
     LaunchedEffect(screen) {
         formDirty = false
@@ -222,13 +230,13 @@ fun TeacherApp(store: TeacherStore) {
                         onObservation = { selectedObservation = it; requestNavigate("editObservation") })
                     "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
                         it.id == selectedStudent && it.classroomId == currentClass.id
-                    }?.let { student -> StudentEditForm(student, currentClass,
+                    }?.let { student -> StudentEditForm(student, currentClass, displayName = studentLabel(snapshot.students, student),
                         back = { requestBack() },
                         save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
                         delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } },
                         onDirty = { formDirty = true }) }
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { requestBack() },
-                        { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } }, onDirty = { formDirty = true })
+                        { name -> commit(returnToPreviousScreen("classDetail")) { store.addStudent(currentClass.id, name) } }, onDirty = { formDirty = true })
                     "attendanceHistory" -> if (currentClass != null) AttendanceHistoryScreen(
                         snapshot, currentClass, back = { back() },
                         openDay = { day -> selectedDay = day; navigate("attendance") },
@@ -237,25 +245,25 @@ fun TeacherApp(store: TeacherStore) {
                         snapshot, currentClass, selectedDay,
                         onDay = { requestDay(it) }, onBack = { requestBack() },
                         onAddStudent = { requestNavigate("addStudent") },
-                        onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } },
+                        onSave = { marks -> commit(returnToPreviousScreen("classDetail")) { store.saveAttendance(currentClass.id, selectedDay, marks) } },
                         onDirty = { formDirty = true })
                     "observationHistory" -> if (currentClass != null) ObservationHistoryScreen(
                         snapshot, currentClass, onBack = { back() },
                         onNew = { requestNavigate("observation") },
                         onOpen = { selectedObservation = it; requestNavigate("editObservation") })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { requestBack() },
-                        { studentId, kind, body, share -> commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") {
+                        { studentId, kind, body, share -> commit(returnToPreviousScreen("classDetail")) {
                             store.addObservation(currentClass.id, studentId, kind, body, share)
                         } }, onDirty = { formDirty = true })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull {
                         it.id == selectedObservation && it.classroomId == currentClass.id
                     }?.let { observation ->
                         ObservationForm(snapshot, currentClass, { requestBack() }, { studentId, kind, body, share ->
-                            commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") {
+                            commit(returnToPreviousScreen("classDetail")) {
                                 store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share)
                             }
                         }, initial = observation,
-                            delete = { commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") {
+                            delete = { commit(returnToPreviousScreen("classDetail")) {
                                 store.deleteObservation(currentClass.id, observation.id)
                             } }, onDirty = { formDirty = true })
                     }
@@ -596,7 +604,7 @@ fun TeacherApp(store: TeacherStore) {
 }
 
 @Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit, onRestore: (Long) -> Unit) {
-    Heading("Suas turmas", "Organize suas classes e alunos")
+    Heading("Suas turmas", "Organize suas turmas e alunos")
     val active = data.classrooms.filterNot { it.archived }
     if (active.isEmpty()) Panel { Text("Nenhuma turma ativa. Crie uma ou restaure uma arquivada.", color = ink) }
     active.forEach { classroom ->
@@ -625,7 +633,7 @@ fun TeacherApp(store: TeacherStore) {
     ActionTile(ApGlyphKind.PLUS, "Adicionar aluno", "Incluir um aluno nesta turma") { go("addStudent") }
     val students = data.students.filter { it.classroomId == classroom.id }
     if (students.isEmpty()) Panel { Text("Esta turma ainda não tem alunos.", color = ink); Spacer(Modifier.height(9.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") } }
-    students.forEach { student -> ActionTile(ApGlyphKind.USERS, student.name, "Consultar e editar cadastro") { onStudent(student.id) } }
+    students.forEach { student -> ActionTile(ApGlyphKind.USERS, studentLabel(data.students, student), "Consultar e editar cadastro") { onStudent(student.id) } }
     Spacer(Modifier.height(17.dp)); Subtitle("Gerenciar turma")
     ActionTile(ApGlyphKind.EDIT, "Editar turma", "Nome, etapa e turno") { go("editClass") }
     Spacer(Modifier.height(14.dp)); Subtitle("Registros recentes")
@@ -651,7 +659,7 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun StudentEditForm(student: Student, classroom: Classroom, back: () -> Unit, save: (String) -> Unit, delete: () -> Unit, onDirty: () -> Unit = {}) {
+@Composable private fun StudentEditForm(student: Student, classroom: Classroom, displayName: String = student.name, back: () -> Unit, save: (String) -> Unit, delete: () -> Unit, onDirty: () -> Unit = {}) {
     var name by rememberSaveable(student.id) { mutableStateOf(student.name) }
     var confirming by remember { mutableStateOf(false) }
     Heading("Editar aluno", classroom.name, back)
@@ -661,8 +669,8 @@ fun TeacherApp(store: TeacherStore) {
         Spacer(Modifier.height(14.dp)); PrimaryButton("Excluir aluno", secondary = true) { confirming = true }
     }
     if (confirming) AlertDialog(
-        onDismissRequest = { confirming = false }, title = { Text("Excluir este aluno?") },
-        text = { Text("A exclusão é permanente. As frequências deste aluno também serão apagadas, e observações vinculadas ficarão sem aluno identificado. Confirme apenas se tiver certeza.") },
+        onDismissRequest = { confirming = false }, title = { Text("Excluir $displayName?") },
+        text = { Text("A exclusão do cadastro é permanente. As chamadas já salvas permanecem no histórico com o nome registrado; observações vinculadas também permanecem, sem identificação do aluno.") },
         confirmButton = { TextButton(onClick = { confirming = false; delete() }) { Text("Excluir definitivamente") } },
         dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancelar") } })
 }
@@ -676,11 +684,13 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun DaySwitch(day: String, onDay: (String) -> Unit) {
     Panel {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Surface(Modifier.size(42.dp).clickable { onDay(LocalDate.parse(day).minusDays(1).toString()) }, color = pale, shape = RoundedCornerShape(13.dp)) {
+            Surface(Modifier.size(48.dp).clickable(role = Role.Button) { onDay(LocalDate.parse(day).minusDays(1).toString()) }
+                .semantics { contentDescription = "Dia anterior" }, color = pale, shape = RoundedCornerShape(13.dp)) {
                 Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.BACK, Modifier.size(20.dp), blue) }
             }
             Text(friendlyDay(day), color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, textAlign = TextAlign.Center)
-            Surface(Modifier.size(42.dp).clickable { onDay(LocalDate.parse(day).plusDays(1).toString()) }, color = pale, shape = RoundedCornerShape(13.dp)) {
+            Surface(Modifier.size(48.dp).clickable(role = Role.Button) { onDay(LocalDate.parse(day).plusDays(1).toString()) }
+                .semantics { contentDescription = "Próximo dia" }, color = pale, shape = RoundedCornerShape(13.dp)) {
                 Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.OPEN, Modifier.size(18.dp), blue) }
             }
         }
@@ -692,7 +702,7 @@ fun TeacherApp(store: TeacherStore) {
     val enrolledStudents = data.students.filter { it.classroomId == classroom.id }
     val session = data.attendanceSessions.firstOrNull { it.classroomId == classroom.id && it.date == day }
     val students = session?.members?.map { Student(it.studentId, classroom.id, it.studentName) } ?: enrolledStudents
-    val draft = remember(classroom.id, day, session, data.attendance) {
+    val draft = remember(classroom.id, day, session, data.attendance, students) {
         mutableStateMapOf<Long, String>().apply {
             if (session != null) session.members.forEach { this[it.studentId] = it.status }
             else students.forEach { student -> this[student.id] = "?" }
@@ -711,6 +721,15 @@ fun TeacherApp(store: TeacherStore) {
         }
     }
     Spacer(Modifier.height(16.dp))
+    if (students.isNotEmpty() && students.any { draft[it.id] != "P" }) {
+        TextButton(
+            onClick = {
+                students.forEach { draft[it.id] = "P" }
+                onDirty()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Marcar todos como presentes", color = blue, fontWeight = FontWeight.Bold) }
+    }
     if (session != null && !session.rosterComplete) {
         Panel {
             Text("Esta chamada antiga não guardava a lista completa. Os nomes e as marcações abaixo são os únicos dados históricos preservados.", color = ink)

@@ -186,6 +186,7 @@ object TeacherBackupRestore {
                 "day" to it.required("date"), "status" to it.required("status"))) }
             records.attendanceSessions?.let { AttendanceV10.restoreBackup(db, it) }
                 ?: AttendanceV10.captureLegacyAttendance(db)
+            AttendanceV10.advanceStudentIdSequencePastSnapshots(db)
             records.observations.forEach { db.insertOrThrow("observations", null, values(
                 "id" to it.id(), "classroom_id" to it.id("classroomId"), "student_id" to it.optionalId("studentId"),
                 "kind" to it.required("kind"), "body" to it.required("body"), "day" to it.required("date"),
