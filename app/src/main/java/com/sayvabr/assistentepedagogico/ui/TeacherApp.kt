@@ -764,6 +764,8 @@ fun TeacherApp(store: TeacherStore) {
                 }
             } else {
                 ApRaisedButton("Fazer chamada de hoje", { go("attendance") }, glyph = ApGlyphKind.CALENDAR)
+            }
+            if (sessions.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
             }

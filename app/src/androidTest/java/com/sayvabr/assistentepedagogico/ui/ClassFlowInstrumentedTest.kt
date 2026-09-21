@@ -131,6 +131,25 @@ class ClassFlowInstrumentedTest {
         compose.onNodeWithText("1 presente • 0 faltas • 0 pendentes").assertExists()
     }
 
+    @Test fun savedAttendanceHistoryRemainsReachableAfterTheLastStudentIsDeleted() {
+        val database = requireNotNull(store)
+        val initial = database.read()
+        val classroom = initial.classrooms.single()
+        val student = initial.students.single()
+        val date = java.time.LocalDate.now().toString()
+        database.saveAttendance(classroom.id, date, mapOf(student.id to "P"))
+        database.deleteStudent(classroom.id, student.id)
+
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+        compose.onNodeWithText("Frequência").performClick()
+        compose.onNodeWithText("Histórico de frequência").assertExists().performClick()
+        compose.onNodeWithText(java.time.LocalDate.parse(date).format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+            .performScrollTo().performClick()
+        compose.onNodeWithText("Estudante fictício").assertExists()
+    }
+
     @Test fun pastedRosterAddsAllNamesIncludingHomonymsAndReturnsToClassDetail() {
         val database = requireNotNull(store)
         openApp()
