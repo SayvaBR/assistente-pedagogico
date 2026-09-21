@@ -78,6 +78,7 @@ fun TeacherApp(store: TeacherStore) {
     var pendingDiscardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var moreSettings by remember { mutableStateOf(MoreSettingsStore.read(context)) }
     val screenScrollState = rememberSaveable(screen, classDetailSection, saver = ScrollState.Saver) { ScrollState(0) }
 
     val rootDestinations = setOf("home", "planning", "classes", "files", "more")
@@ -364,15 +365,39 @@ fun TeacherApp(store: TeacherStore) {
                             catch (e: Exception) { error = "Não foi possível abrir este arquivo. Verifique se ele ainda existe e se há um aplicativo compatível." }
                         },
                         renameFile = { file, newName -> commit("files") { store.renameFile(file.id, newName) } })
-                    "more" -> MoreScreen(snapshot, { requestNavigate(it) })
+                    "more" -> MoreSettingsIndex(snapshot.profile?.name.orEmpty(), { requestNavigate(it) }, { confirmExit = true })
                     "profile" -> ProfileForm(snapshot.profile.name, { requestBack() },
                         { name -> commit("more") { store.saveProfile(name) } }, onDirty = { formDirty = true })
+                    "notifications" -> NotificationsSettings(moreSettings, { requestBack() }) { settings ->
+                        MoreSettingsStore.write(context, settings)
+                        moreSettings = settings
+                        requestBack()
+                    }
+                    "appearance" -> AppearanceSettings(moreSettings, { requestBack() }) { settings ->
+                        MoreSettingsStore.write(context, settings)
+                        moreSettings = settings
+                        requestBack()
+                    }
+                    "language" -> LanguageSettings(moreSettings, { requestBack() }) { settings ->
+                        MoreSettingsStore.write(context, settings)
+                        moreSettings = settings
+                        requestBack()
+                    }
+                    "privacy" -> PrivacySettings({ requestBack() }) {
+                        commit(onSuccess = {
+                            MoreSettingsStore.write(context, MoreSettings())
+                            moreSettings = MoreSettings()
+                            (context as? android.app.Activity)?.recreate()
+                        }) { store.clearAllData() }
+                    }
+                    "backup" -> BackupSettings({ requestBack() })
+                    "about" -> AboutSettings({ requestBack() })
                     else -> HomeScreen(snapshot, currentClass, { requestNavigate(it) }, { selectedClass = it })
                 }
                 Spacer(Modifier.height(ApSpace.Xl))
             }
         }
-        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "addStudents", "editStudent", "newLesson", "editLesson", "observation", "editObservation", "newAppointment", "editAppointment", "profile")) {
+        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "addStudents", "editStudent", "newLesson", "editLesson", "observation", "editObservation", "newAppointment", "editAppointment", "profile", "notifications", "appearance", "language", "privacy", "backup", "about")) {
             BottomBar(tab) { destination ->
                 requestNavigate(when (destination) {
                     "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more"
@@ -1137,20 +1162,6 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun AgendaScreen(data: TeacherSnapshot, day: String, onDay: (String) -> Unit,
     add: () -> Unit, open: (Long) -> Unit, openLesson: (Long) -> Unit) {
     PlanningAgendaScreen(data, day, onDay, add, open, openLesson)
-}
-
-@Composable private fun MoreScreen(data: TeacherSnapshot, go: (String) -> Unit) {
-    Heading("Mais", "Ferramentas e recursos extras")
-    ActionTile(ApGlyphKind.USERS, "Perfil profissional", data.profile?.name.orEmpty()) { go("profile") }
-    ActionTile(ApGlyphKind.USERS, "Gerenciar turmas", "Criar, consultar e organizar") { go("classes") }
-    ActionTile(ApGlyphKind.CALENDAR, "Planejamento", "Suas aulas") { go("planning") }
-    ActionTile(ApGlyphKind.FOLDER, "Arquivos", "Documentos no aparelho") { go("files") }
-    Spacer(Modifier.height(15.dp))
-    Panel {
-        Text("Privacidade primeiro", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Black)
-        Spacer(Modifier.height(8.dp))
-        Text("Os registros estão armazenados localmente. Conta na nuvem, assinaturas e sincronização ainda não estão ativadas; não coletamos dados dos estudantes em serviços externos.", color = ink, fontSize = 13.sp)
-    }
 }
 
 @Composable private fun ProfileForm(original: String, back: () -> Unit, save: (String) -> Unit, onDirty: () -> Unit = {}) {
