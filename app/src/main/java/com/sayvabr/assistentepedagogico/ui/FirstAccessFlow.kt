@@ -257,7 +257,7 @@ private fun EntryAuth(signup: Boolean, switch: () -> Unit, local: (String?) -> U
     if (!signup) {
         TextButton(
             onClick = { remoteMessage = "A recuperação de senha online será disponibilizada quando o provedor de contas for integrado. Seus dados locais continuam acessíveis sem login." },
-            modifier = Modifier.align(Alignment.End),
+            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.End),
         ) { Text("Esqueceu a senha?", color = ApColors.Pressed, fontSize = 13.sp) }
     }
     ApRaisedButton(
