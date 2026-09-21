@@ -130,7 +130,9 @@ def wait_for_text(anchor, timeout=12):
 
 
 def write_field(label, value, screen_anchor, recover=None):
-    tap_text(label)
+    # Exact matching avoids tapping explanatory copy such as “Seu nome profissional”
+    # when the actual text field is labeled “Seu nome”.
+    tap_text(label, exact=True)
     adb('shell', 'input', 'text', value)
     time.sleep(.4)
     root, _ = hierarchy()
