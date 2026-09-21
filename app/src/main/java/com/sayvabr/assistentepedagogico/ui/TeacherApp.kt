@@ -640,7 +640,7 @@ fun TeacherApp(store: TeacherStore) {
     val visibleActive = active.filter(::matches)
     val visibleArchived = archived.filter(::matches)
     if (active.size < 2) {
-        PrimaryButton("+ Nova turma") { onAdd() }
+        ApRaisedButton("Nova turma", onAdd, glyph = ApGlyphKind.PLUS)
         Spacer(Modifier.height(12.dp))
     } else {
         Panel {
@@ -721,7 +721,7 @@ fun TeacherApp(store: TeacherStore) {
                 Panel {
                     Text("Sua lista começa aqui", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(5.dp)); Text("Adicione os alunos agora ou cole uma lista. Você poderá editar os cadastros depois.", color = ink.copy(alpha = .72f))
-                    Spacer(Modifier.height(14.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") }
+                    Spacer(Modifier.height(14.dp)); ApRaisedButton("Adicionar primeiro aluno", { go("addStudent") }, glyph = ApGlyphKind.PLUS)
                     TextButton(onClick = { go("addStudents") }, modifier = Modifier.fillMaxWidth().heightIn(min = ApSizeToken.MinTouchTarget)) {
                         Text("Colar uma lista de alunos", color = ApPalette.Action, fontWeight = FontWeight.Bold)
                     }
@@ -760,10 +760,10 @@ fun TeacherApp(store: TeacherStore) {
             if (students.isEmpty()) {
                 Panel {
                     Text("Adicione alunos antes de iniciar a chamada.", color = ink)
-                    Spacer(Modifier.height(12.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") }
+                    Spacer(Modifier.height(12.dp)); ApRaisedButton("Adicionar primeiro aluno", { go("addStudent") }, glyph = ApGlyphKind.PLUS)
                 }
             } else {
-                PrimaryButton("Fazer chamada de hoje") { go("attendance") }
+                ApRaisedButton("Fazer chamada de hoje", { go("attendance") }, glyph = ApGlyphKind.CALENDAR)
                 Spacer(Modifier.height(10.dp))
                 ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
             }
@@ -792,7 +792,7 @@ fun TeacherApp(store: TeacherStore) {
 
         "Registros" -> {
             Subtitle("Acompanhamento pedagógico")
-            PrimaryButton("Novo registro") { go("observation") }
+            ApRaisedButton("Novo registro", { go("observation") }, glyph = ApGlyphKind.DOCUMENT)
             Spacer(Modifier.height(9.dp))
             ActionTile(ApGlyphKind.DOCUMENT, "Histórico de registros", "Consultar e editar as observações desta turma") { go("observationHistory") }
             Spacer(Modifier.height(8.dp)); Subtitle("Mais recentes")
@@ -806,13 +806,13 @@ fun TeacherApp(store: TeacherStore) {
                 Panel {
                     Text("Prepare sua turma", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(5.dp)); Text("Cadastre a lista uma vez. Depois, a chamada fica a um toque de distância.", color = ink.copy(alpha = .72f))
-                    Spacer(Modifier.height(14.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") }
+                    Spacer(Modifier.height(14.dp)); ApRaisedButton("Adicionar primeiro aluno", { go("addStudent") }, glyph = ApGlyphKind.PLUS)
                     TextButton(onClick = { go("addStudents") }, modifier = Modifier.fillMaxWidth().heightIn(min = ApSizeToken.MinTouchTarget)) {
                         Text("Colar uma lista de alunos", color = ApPalette.Action, fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
-                PrimaryButton("Fazer chamada de hoje") { go("attendance") }
+                ApRaisedButton("Fazer chamada de hoje", { go("attendance") }, glyph = ApGlyphKind.CALENDAR)
                 Spacer(Modifier.height(14.dp))
                 Subtitle("Resumo da turma")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
