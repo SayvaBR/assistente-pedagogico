@@ -116,7 +116,9 @@ def tap_detail_tab(label):
     root, _ = hierarchy()
     target = next((node for node in root.iter('node') if node.get('text', '').casefold() == label.casefold()), None)
     width = device_width()
-    direction = (24, width - 24) if label.casefold() == 'visão do dia' else (width - 24, 24)
+    # Keep horizontal swipes away from the screen edges: Android's edge-back gesture
+    # would otherwise leave class detail instead of revealing the trailing tabs.
+    direction = (int(width * .2), int(width * .8)) if label.casefold() == 'visão do dia' else (int(width * .8), int(width * .2))
     if target is not None:
         x1, y1, x2, y2 = bounds(target)
         center_x = (x1 + x2) // 2
