@@ -89,6 +89,48 @@ class ClassFlowInstrumentedTest {
         compose.onNodeWithText("Suas turmas").assertExists()
     }
 
+    @Test fun classDetailTabsKeepThePrimaryActionAndSeparateClassTasks() {
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+
+        compose.onNodeWithText("Fazer chamada de hoje").assertExists()
+        compose.onNodeWithText("Acessos rápidos").assertExists()
+        compose.onNodeWithText("Alunos").performClick()
+        compose.onNodeWithText("Adicionar aluno").assertExists()
+        compose.onNodeWithText("Acessos rápidos").assertDoesNotExist()
+        compose.onNodeWithText("Fazer chamada de hoje").assertDoesNotExist()
+
+        compose.onNodeWithText("Frequência").performClick()
+        compose.onNodeWithText("Fazer chamada de hoje").assertExists()
+        compose.onNodeWithText("Histórico de frequência").assertExists()
+
+        compose.onNodeWithText("Registros").performClick()
+        compose.onNodeWithText("Novo registro").assertExists()
+        compose.onNodeWithText("Histórico de registros").assertExists()
+    }
+
+    @Test fun attendanceFromClassDetailReturnsToFrequencyWithTheSavedSummary() {
+        val database = requireNotNull(store)
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+        compose.onNodeWithText("Frequência").performClick()
+        compose.onNodeWithText("Fazer chamada de hoje").performClick()
+
+        compose.onNodeWithText("Marcar todos como presentes").performScrollTo().performClick()
+        compose.onNodeWithText("Salvar frequência").performScrollTo().performClick()
+        compose.waitUntil(15_000) {
+            database.read().attendanceSessions.singleOrNull()?.members?.singleOrNull()?.status == "P"
+        }
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("Última chamada").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        compose.onNodeWithText("Última chamada").assertExists()
+        compose.onNodeWithText("1 presente • 0 faltas • 0 pendentes").assertExists()
+    }
+
     @Test fun pastedRosterAddsAllNamesIncludingHomonymsAndReturnsToClassDetail() {
         val database = requireNotNull(store)
         openApp()
@@ -100,13 +142,15 @@ class ClassFlowInstrumentedTest {
         compose.onNodeWithText("Adicionar 3 alunos").performScrollTo().performClick()
 
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithText("Ana Silva").fetchSemanticsNodes().isNotEmpty()
+            database.read().students.count { it.name == "Ana Silva" } == 2 &&
+                database.read().students.count { it.name == "Bruno Souza" } == 1
         }
         val saved = database.read()
         assertEquals(4, saved.students.size)
         assertEquals(2, saved.students.count { it.name == "Ana Silva" })
         assertEquals(1, saved.students.count { it.name == "Bruno Souza" })
-        compose.onNodeWithText("Fazer chamada de hoje").assertExists()
+        compose.onAllNodesWithText("Ana Silva · cadastro", substring = true).assertCountEquals(2)
+        compose.onNodeWithText("Adicionar aluno").assertExists()
     }
 
     @Test fun largeRosterCanBeSearchedByNameWithoutChangingRecords() {
@@ -116,9 +160,10 @@ class ClassFlowInstrumentedTest {
         openApp()
         compose.onAllNodesWithText("Turmas").onLast().performClick()
         compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+        compose.onNodeWithText("Alunos").performClick()
 
         compose.onNodeWithText("Buscar aluno pelo nome").performScrollTo().performTextInput("Estudante 9")
-        compose.onNodeWithText("Estudante 9").assertExists()
+        compose.onAllNodesWithText("Estudante 9", substring = true).onLast().assertExists()
         compose.onNodeWithText("Estudante 2").assertDoesNotExist()
         assertEquals(9, database.read().students.size)
     }
@@ -134,12 +179,26 @@ class ClassFlowInstrumentedTest {
         openApp()
         compose.onAllNodesWithText("Turmas").onLast().performClick()
         compose.onNodeWithText("Buscar turma por nome, etapa ou turno").performTextInput("Turma arquivada 3")
-        compose.onNodeWithText("Turma arquivada 3").performScrollTo().performClick()
+        compose.onAllNodesWithText("Turma arquivada 3", substring = true).onLast().performScrollTo().performClick()
 
         compose.waitUntil(15_000) {
-            compose.onAllNodesWithText("Turma arquivada 3").fetchSemanticsNodes().isNotEmpty()
+            database.read().classrooms.single { it.name == "Turma arquivada 3" }.archived.not()
         }
         assertEquals(false, database.read().classrooms.single { it.name == "Turma arquivada 3" }.archived)
         compose.onNodeWithText("Turma arquivada 2").assertDoesNotExist()
+    }
+
+    @Test fun restoreAtFreeClassLimitIsDisabledWithAnExplanation() {
+        val database = requireNotNull(store)
+        val archived = database.createClass("Turma arquivada", "Ensino Fundamental", "Matutino")
+        database.setClassArchived(archived, true)
+        database.createClass("Turma ativa adicional", "Ensino Fundamental", "Vespertino")
+
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Turmas arquivadas").performScrollTo()
+        compose.onNodeWithText("Turma arquivada").performScrollTo().assertHasNoClickAction()
+        compose.onNodeWithText("Libere uma vaga ativa para restaurar esta turma.").assertExists()
+        assertEquals(true, database.read().classrooms.single { it.id == archived }.archived)
     }
 }

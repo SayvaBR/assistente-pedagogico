@@ -34,7 +34,7 @@ jobs:
       - name: Build internally, launch and capture REAL Android screens
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           target: google_apis
           arch: x86_64
           profile: pixel_6
@@ -43,14 +43,27 @@ jobs:
             set -eu
             gradle --no-daemon :app:assembleDebug
             adb install -r app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n com.sayvabr.assistentepedagogico.preview/com.sayvabr.assistentepedagogico.MainActivity
-            python3 tools/capture_android_screens.py
+            capture_variant() {
+              variant="$1"
+              density="$2"
+              font_scale="$3"
+              adb shell wm size 1080x2400
+              adb shell wm density "$density"
+              adb shell settings put system font_scale "$font_scale"
+              adb shell pm clear com.sayvabr.assistentepedagogico.preview
+              adb shell am start -W -n com.sayvabr.assistentepedagogico.preview/com.sayvabr.assistentepedagogico.MainActivity
+              CAPTURE_VARIANT="$variant" python3 tools/capture_android_screens.py
+            }
+            capture_variant 360dp 480 1.0
+            capture_variant 412dp 420 1.0
+            capture_variant 480dp 360 1.0
+            capture_variant 412dp-font-1_3 420 1.3
       - name: Upload genuine screenshots, including partial evidence after failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-ui-evidence
-          path: visual-evidence/*.png
+          path: visual-evidence/**/*.png
           if-no-files-found: warn
           retention-days: 3
       # No APK upload, signed bundle, store publication or use of student records.

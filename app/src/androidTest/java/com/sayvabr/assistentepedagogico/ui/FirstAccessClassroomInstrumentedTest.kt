@@ -47,6 +47,9 @@ class FirstAccessClassroomInstrumentedTest {
         store = database
         compose.setContent { ApTheme { FirstAccessFlow(database) } }
 
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("Preparar meu espaço").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("Preparar meu espaço").performClick()
         compose.onNodeWithText("Seu nome").performTextInput("Docente fictícia")
         compose.onNodeWithText("Continuar").performClick()

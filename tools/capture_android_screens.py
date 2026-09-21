@@ -5,14 +5,16 @@ A capture is evidence of what the running app rendered, NEVER a generated mockup
 Fail when navigation cannot be proven and retain diagnostic images for debugging.
 """
 from pathlib import Path
+import os
 import re
 import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
 
-OUT = Path('visual-evidence')
-OUT.mkdir(exist_ok=True)
+variant = os.environ.get('CAPTURE_VARIANT', '').strip()
+OUT = Path('visual-evidence') / variant if variant else Path('visual-evidence')
+OUT.mkdir(parents=True, exist_ok=True)
 
 
 def adb(*args, text=True):
@@ -184,7 +186,7 @@ try:
     wait_for_text('Suas turmas')
     screenshot('04-turmas-lista')
     tap_text('TurmaTeste', exact=True)
-    wait_for_text('Fazer chamada de hoje')
+    wait_for_text('Prepare sua turma')
     screenshot('05-detalhe-turma-vazia')
     tap_text('Adicionar primeiro aluno', exact=True)
     wait_for_text('Nome completo do aluno')
@@ -193,10 +195,15 @@ try:
     tap_text('Salvar aluno', exact=True)
     wait_for_text('EstudanteTeste')
     screenshot('07-turma-com-aluno')
+    tap_text('Frequência', exact=True)
+    screenshot('08-frequencia-turma')
+    tap_text('Registros', exact=True)
+    screenshot('09-registros-turma')
+    tap_text('Visão do dia', exact=True)
     tap_text('Fazer chamada de hoje', exact=True)
     wait_for_text('Pendentes')
-    screenshot('08-frequencia-da-turma')
-    print('SUCCESS: 9 genuine captures from the running app, including the first-access and Turmas journeys.', flush=True)
+    screenshot('10-fazer-chamada')
+    print(f'SUCCESS: 11 genuine captures in {OUT} from the running app, including first access and all Turmas sections.', flush=True)
 except Exception as error:
     print(f'ANDROID SCREENSHOT FLOW FAILED: {error}', file=sys.stderr, flush=True)
     try:

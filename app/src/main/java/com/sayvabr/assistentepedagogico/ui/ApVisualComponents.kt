@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -60,11 +61,21 @@ enum class ApGlyphKind { DOCUMENT, SEARCH, BACK, IMPORT, OPEN, EDIT, TRASH, FOLD
 
 @Composable fun ApRaisedButton(label:String,onClick:()->Unit,modifier:Modifier=Modifier,glyph:ApGlyphKind?=null,secondary:Boolean=false,enabled:Boolean=true) {
     val interaction=remember{MutableInteractionSource()}; val pressed by interaction.collectIsPressedAsState(); val depth=if(pressed&&enabled)1.dp else 5.dp
-    val top=if(secondary)ApPalette.LightSurface else ApColors.Primary; val bottom=if(secondary)ApPalette.Outline else ApColors.Pressed
-    Box(modifier.fillMaxWidth().height(60.dp).background(if(enabled)bottom else ApPalette.Outline,RoundedCornerShape(19.dp)).padding(bottom=depth,top=5.dp-depth)) {
-        Button(onClick=onClick,enabled=enabled,interactionSource=interaction,modifier=Modifier.fillMaxSize().semantics{contentDescription=label},shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=top,contentColor=if(secondary)ApColors.Navy else ApColors.White,disabledContainerColor=ApPalette.Outline,disabledContentColor=ApColors.Navy),contentPadding=PaddingValues(horizontal=12.dp)) {
-            if(glyph!=null){ApGlyph(glyph,Modifier.size(22.dp),if(secondary)ApColors.Navy else ApColors.White);Spacer(Modifier.width(9.dp))}
-            Text(label,fontSize=15.sp,lineHeight=19.sp,fontWeight=FontWeight.ExtraBold,maxLines=2,overflow=TextOverflow.Ellipsis)
+    val shape=RoundedCornerShape(ApShapeToken.Medium)
+    val bottom=if(secondary)ApPalette.Outline else ApPalette.ActionPressed
+    val face=when {
+        !enabled -> ApPalette.DisabledSurface
+        secondary -> ApPalette.LightSurface
+        pressed -> ApPalette.ActionPressed
+        else -> Color.Transparent
+    }
+    val faceModifier=if(enabled&&!secondary&&!pressed) Modifier.background(
+        Brush.verticalGradient(listOf(ApPalette.ActionGradientTop,ApPalette.Action)),shape
+    ) else Modifier.background(face,shape)
+    Box(modifier.fillMaxWidth().height(60.dp).background(if(enabled)bottom else ApPalette.DisabledSurface,shape).padding(bottom=depth,top=5.dp-depth)) {
+        Button(onClick=onClick,enabled=enabled,interactionSource=interaction,modifier=Modifier.fillMaxSize().then(faceModifier).semantics{contentDescription=label},shape=shape,colors=ButtonDefaults.buttonColors(containerColor=Color.Transparent,contentColor=if(secondary)ApPalette.Action else ApPalette.White,disabledContainerColor=Color.Transparent,disabledContentColor=ApPalette.DisabledText),elevation=ButtonDefaults.buttonElevation(defaultElevation=0.dp,pressedElevation=0.dp,disabledElevation=0.dp),contentPadding=PaddingValues(horizontal=20.dp)) {
+            if(glyph!=null){ApGlyph(glyph,Modifier.size(24.dp),if(secondary)ApPalette.Action else ApPalette.White);Spacer(Modifier.width(8.dp))}
+            Text(label,fontSize=16.sp,lineHeight=20.sp,fontWeight=FontWeight.ExtraBold,maxLines=2,overflow=TextOverflow.Ellipsis)
         }
     }
 }
