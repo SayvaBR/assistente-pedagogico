@@ -145,6 +145,27 @@ object AttendanceV10 {
         }
     }
 
+    /** Historical snapshots may reference students already deleted from the live roster. */
+    fun advanceStudentIdSequencePastSnapshots(db: SQLiteDatabase) {
+        val historicalMax = db.rawQuery(
+            "SELECT COALESCE(MAX(student_id), 0) FROM attendance_session_members", null,
+        ).use { cursor -> cursor.moveToFirst(); cursor.getLong(0) }
+        val liveMax = db.rawQuery("SELECT COALESCE(MAX(id), 0) FROM students", null)
+            .use { cursor -> cursor.moveToFirst(); cursor.getLong(0) }
+        val idHighWater = maxOf(historicalMax, liveMax)
+        if (idHighWater <= 0) return
+
+        val sequenceRow = db.rawQuery(
+            "SELECT seq FROM sqlite_sequence WHERE name='students'", null,
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+        val nextSequence = maxOf(sequenceRow ?: 0L, idHighWater)
+        if (sequenceRow != null) {
+            db.execSQL("UPDATE sqlite_sequence SET seq=? WHERE name='students'", arrayOf(nextSequence))
+        } else {
+            db.insertOrThrow("sqlite_sequence", null, values("name" to "students", "seq" to nextSequence))
+        }
+    }
+
     private fun values(vararg pairs: Pair<String, Any?>) = ContentValues().apply {
         pairs.forEach { (key, value) -> when (value) {
             null -> putNull(key)

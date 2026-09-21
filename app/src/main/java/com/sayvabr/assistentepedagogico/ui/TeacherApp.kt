@@ -8,7 +8,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +49,10 @@ private val red = ApColors.Navy
 private val brDate = DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))
 private fun friendlyDay(day: String) = LocalDate.parse(day).format(brDate).replaceFirstChar { it.uppercase() }
 private fun today() = LocalDate.now().toString()
+private fun studentLabel(allStudents: List<Student>, student: Student): String =
+    if (allStudents.count { it.classroomId == student.classroomId && it.name.equals(student.name, ignoreCase = true) } > 1) {
+        "${student.name} · cadastro ${student.id}"
+    } else student.name
 
 /** Working offline product slice; navigation points only to implemented screens. */
 @Composable
@@ -52,6 +63,8 @@ fun TeacherApp(store: TeacherStore) {
     var screen by rememberSaveable { mutableStateOf("home") }
     var tab by rememberSaveable { mutableStateOf("Início") }
     var selectedClass by rememberSaveable { mutableLongStateOf(-1L) }
+    var classDetailSection by rememberSaveable { mutableStateOf("Visão do dia") }
+    var classStudentSearch by rememberSaveable { mutableStateOf("") }
     var selectedStudent by rememberSaveable { mutableLongStateOf(-1L) }
     var selectedDay by rememberSaveable { mutableStateOf(today()) }
     var selectedAppointment by rememberSaveable { mutableLongStateOf(-1L) }
@@ -64,6 +77,7 @@ fun TeacherApp(store: TeacherStore) {
     var pendingDiscardAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    val screenScrollState = rememberSaveable(screen, classDetailSection, saver = ScrollState.Saver) { ScrollState(0) }
 
     val rootDestinations = setOf("home", "planning", "classes", "files", "more")
     fun synchronizeTab(destination: String) {
@@ -106,6 +120,7 @@ fun TeacherApp(store: TeacherStore) {
     fun requestBack() = guardDiscard { back() }
     fun requestNavigate(destination: String, root: Boolean = false) = guardDiscard { navigate(destination, root) }
     fun requestDay(day: String) = guardDiscard { selectedDay = day }
+    fun returnToPreviousScreen(defaultDestination: String) = backStack.lastOrNull() ?: defaultDestination
 
     LaunchedEffect(screen) {
         formDirty = false
@@ -192,7 +207,7 @@ fun TeacherApp(store: TeacherStore) {
 
     Column(Modifier.fillMaxSize().background(canvas)) {
         Box(Modifier.weight(1f)) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = ApSpace.Base)) {
+            Column(Modifier.fillMaxSize().verticalScroll(screenScrollState).padding(horizontal = ApSpace.Base)) {
                 Spacer(Modifier.height(18.dp))
                 when (screen) {
                     "home" -> HomeScreen(snapshot, currentClass, { destination ->
@@ -200,7 +215,7 @@ fun TeacherApp(store: TeacherStore) {
                         requestNavigate(destination)
                     }, { selectedClass = it })
                     "classes" -> ClassesScreen(snapshot, currentClass,
-                        onPick = { selectedClass = it; requestNavigate("classDetail") },
+                        onPick = { selectedClass = it; classDetailSection = "Visão do dia"; classStudentSearch = ""; requestNavigate("classDetail") },
                         onAdd = { requestNavigate("createClass") },
                         onRestore = { id -> commit("classes") { store.setClassArchived(id, false) } })
                     "createClass" -> ClassForm(
@@ -214,18 +229,36 @@ fun TeacherApp(store: TeacherStore) {
                         onDirty = { formDirty = true })
                     "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
                         back = { back() }, archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
-                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { requestNavigate(it) },
-                        onStudent = { selectedStudent = it; requestNavigate("editStudent") },
-                        onObservation = { selectedObservation = it; requestNavigate("editObservation") })
+                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass,
+                        section = classDetailSection,
+                        onSectionChange = { classDetailSection = it },
+                        studentSearch = classStudentSearch,
+                        onStudentSearchChange = { classStudentSearch = it },
+                        back = { requestBack() },
+                        go = {
+                            classDetailSection = when (it) {
+                                "attendance", "attendanceHistory" -> "Frequência"
+                                "addStudent", "addStudents", "editStudent" -> "Alunos"
+                                "observation", "observationHistory", "editObservation" -> "Registros"
+                                else -> "Visão do dia"
+                            }
+                            if (it == "attendance") selectedDay = today()
+                            requestNavigate(it)
+                        },
+                        onStudent = { selectedStudent = it; classDetailSection = "Alunos"; requestNavigate("editStudent") },
+                        onObservation = { selectedObservation = it; classDetailSection = "Registros"; requestNavigate("editObservation") })
                     "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
                         it.id == selectedStudent && it.classroomId == currentClass.id
-                    }?.let { student -> StudentEditForm(student, currentClass,
+                    }?.let { student -> StudentEditForm(student, currentClass, displayName = studentLabel(snapshot.students, student),
                         back = { requestBack() },
                         save = { name -> commit("classDetail") { store.updateStudent(currentClass.id, student.id, name) } },
                         delete = { commit("classDetail") { store.deleteStudent(currentClass.id, student.id) } },
                         onDirty = { formDirty = true }) }
                     "addStudent" -> if (currentClass != null) StudentForm(currentClass, { requestBack() },
-                        { name -> commit("classDetail") { store.addStudent(currentClass.id, name) } }, onDirty = { formDirty = true })
+                        { name -> commit(returnToPreviousScreen("classDetail")) { store.addStudent(currentClass.id, name) } }, onDirty = { formDirty = true })
+                    "addStudents" -> if (currentClass != null) StudentRosterImportForm(currentClass, { requestBack() },
+                        { names -> commit(returnToPreviousScreen("classDetail")) { store.addStudents(currentClass.id, names) } },
+                        onDirty = { formDirty = true })
                     "attendanceHistory" -> if (currentClass != null) AttendanceHistoryScreen(
                         snapshot, currentClass, back = { back() },
                         openDay = { day -> selectedDay = day; navigate("attendance") },
@@ -234,25 +267,25 @@ fun TeacherApp(store: TeacherStore) {
                         snapshot, currentClass, selectedDay,
                         onDay = { requestDay(it) }, onBack = { requestBack() },
                         onAddStudent = { requestNavigate("addStudent") },
-                        onSave = { marks -> commit("classDetail") { store.saveAttendance(currentClass.id, selectedDay, marks) } },
+                        onSave = { marks -> commit(returnToPreviousScreen("classDetail")) { store.saveAttendance(currentClass.id, selectedDay, marks) } },
                         onDirty = { formDirty = true })
                     "observationHistory" -> if (currentClass != null) ObservationHistoryScreen(
                         snapshot, currentClass, onBack = { back() },
                         onNew = { requestNavigate("observation") },
                         onOpen = { selectedObservation = it; requestNavigate("editObservation") })
                     "observation" -> if (currentClass != null) ObservationForm(snapshot, currentClass, { requestBack() },
-                        { studentId, kind, body, share -> commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") {
+                        { studentId, kind, body, share -> commit(returnToPreviousScreen("classDetail")) {
                             store.addObservation(currentClass.id, studentId, kind, body, share)
                         } }, onDirty = { formDirty = true })
                     "editObservation" -> if (currentClass != null) snapshot.observations.firstOrNull {
                         it.id == selectedObservation && it.classroomId == currentClass.id
                     }?.let { observation ->
                         ObservationForm(snapshot, currentClass, { requestBack() }, { studentId, kind, body, share ->
-                            commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") {
+                            commit(returnToPreviousScreen("classDetail")) {
                                 store.updateObservation(currentClass.id, observation.id, studentId, kind, body, share)
                             }
                         }, initial = observation,
-                            delete = { commit(if (backStack.lastOrNull() == "observationHistory") "observationHistory" else "classDetail") {
+                            delete = { commit(returnToPreviousScreen("classDetail")) {
                                 store.deleteObservation(currentClass.id, observation.id)
                             } }, onDirty = { formDirty = true })
                     }
@@ -317,7 +350,7 @@ fun TeacherApp(store: TeacherStore) {
                 Spacer(Modifier.height(ApSpace.Xl))
             }
         }
-        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "editStudent", "newLesson", "editLesson", "observation", "editObservation", "newAppointment", "editAppointment", "profile")) {
+        if (screen !in listOf("createClass", "editClass", "archiveClass", "addStudent", "addStudents", "editStudent", "newLesson", "editLesson", "observation", "editObservation", "newAppointment", "editAppointment", "profile")) {
             BottomBar(tab) { destination ->
                 requestNavigate(when (destination) {
                     "Início" -> "home"; "Planejamento" -> "planning"; "Turmas" -> "classes"; "Arquivos" -> "files"; else -> "more"
@@ -369,15 +402,17 @@ fun TeacherApp(store: TeacherStore) {
 
 @Composable private fun Panel(content: @Composable ColumnScope.() -> Unit) = ApCard(content = content)
 
-@Composable private fun PrimaryButton(label: String, secondary: Boolean = false, click: () -> Unit) {
-    ApRaisedButton(label = label, onClick = click, secondary = secondary)
+@Composable private fun PrimaryButton(label: String, secondary: Boolean = false, enabled: Boolean = true, click: () -> Unit) {
+    ApRaisedButton(label = label, onClick = click, secondary = secondary, enabled = enabled)
 }
 
 @Composable private fun Heading(title: String, subtitle: String? = null, back: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (back != null) {
             Surface(
-                modifier = Modifier.size(46.dp).clickable(onClick = back),
+                modifier = Modifier.size(48.dp)
+                    .clickable(role = Role.Button, onClick = back)
+                    .semantics { contentDescription = "Voltar" },
                 color = ApColors.White,
                 shape = RoundedCornerShape(15.dp),
                 border = BorderStroke(1.dp, outline),
@@ -385,13 +420,13 @@ fun TeacherApp(store: TeacherStore) {
             Spacer(Modifier.width(12.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, color = ink, fontSize = 25.sp, lineHeight = 29.sp, fontWeight = FontWeight.Black)
+            Text(title, color = ink, fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold)
             if (subtitle != null) Text(subtitle, color = ink.copy(alpha = .72f), fontSize = 14.sp)
         }
     }
     Spacer(Modifier.height(20.dp))
 }
-@Composable private fun Subtitle(label: String) { Text(label, color = ink, fontSize = 20.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(12.dp)) }
+@Composable private fun Subtitle(label: String) { Text(label, color = ink, fontSize = 18.sp, fontWeight = FontWeight.Bold); Spacer(Modifier.height(12.dp)) }
 @Composable private fun Input(label: String, value: String, change: (String) -> Unit, multiline: Boolean = false) {
     OutlinedTextField(value = value, onValueChange = change, modifier = Modifier.fillMaxWidth(), label = { Text(label) },
         shape = RoundedCornerShape(ApShapeToken.Medium), minLines = if (multiline) 3 else 1, maxLines = if (multiline) 6 else 1,
@@ -400,12 +435,13 @@ fun TeacherApp(store: TeacherStore) {
             focusedContainerColor = ApColors.White, unfocusedContainerColor = ApColors.White))
     Spacer(Modifier.height(10.dp))
 }
-@Composable private fun Choices(options: List<String>, current: String, pick: (String) -> Unit) {
-    options.chunked(3).forEach { chunk ->
+@Composable private fun Choices(options: List<String>, current: String, columns: Int = 3, pick: (String) -> Unit) {
+    options.chunked(columns).forEach { chunk ->
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             chunk.forEach { option ->
                 val chosen = option == current
-                Surface(modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget).clickable { pick(option) },
+                Surface(modifier = Modifier.weight(1f).heightIn(min = ApSizeToken.MinTouchTarget)
+                    .selectable(selected = chosen, role = Role.RadioButton) { pick(option) },
                     shape = RoundedCornerShape(13.dp), color = if (chosen) blue else Color.White,
                     border = BorderStroke(1.dp, if (chosen) blue else outline)) {
                     Box(contentAlignment = Alignment.Center) {
@@ -420,10 +456,12 @@ fun TeacherApp(store: TeacherStore) {
 }
 @Composable private fun NavItem(label: String, glyph: ApGlyphKind, selected: Boolean, modifier: Modifier, click: () -> Unit) {
     Column(modifier.heightIn(min = 64.dp).clickable(onClick = click).padding(vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        ApGlyph(glyph, Modifier.size(25.dp), if (selected) blue else ink.copy(alpha = .48f))
+        Box(Modifier.width(48.dp).height(32.dp).background(if (selected) ApPalette.LightSurface else Color.Transparent, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+            ApGlyph(glyph, Modifier.size(22.dp), if (selected) ApPalette.Action else ink.copy(alpha = .64f))
+        }
         Spacer(Modifier.height(3.dp))
         Text(label, fontSize = 10.sp, fontWeight = if (selected) FontWeight.Black else FontWeight.Bold,
-            color = if (selected) blue else ink.copy(alpha = .62f), maxLines = 1)
+            color = if (selected) ApPalette.Action else ink.copy(alpha = .70f), maxLines = 1)
     }
 }
 @Composable private fun BottomBar(selected: String, pick: (String) -> Unit) {
@@ -442,14 +480,15 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun ActionTile(glyph: ApGlyphKind, title: String, detail: String = "", click: () -> Unit) {
     Surface(modifier = Modifier.fillMaxWidth().clickable(onClick = click), shape = RoundedCornerShape(ApShapeToken.Card),
         color = Color.White, border = BorderStroke(1.dp, outline)) {
-        Row(Modifier.padding(ApSpace.Base), verticalAlignment = Alignment.CenterVertically) {
-            ApIconBadge(glyph)
+        Row(Modifier.padding(horizontal = ApSpace.Base, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).background(ApPalette.LightSurface, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) { ApGlyph(glyph, Modifier.size(23.dp), ApPalette.Action) }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
-                if (detail.isNotEmpty()) Text(detail, color = ink.copy(alpha = .68f), fontSize = 12.sp)
+                Text(title, color = ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 21.sp)
+                if (detail.isNotEmpty()) { Spacer(Modifier.height(3.dp)); Text(detail, color = ink.copy(alpha = .68f), fontSize = 12.sp, lineHeight = 18.sp) }
             }
-            ApGlyph(ApGlyphKind.OPEN, Modifier.size(20.dp), blue)
+            Spacer(Modifier.width(8.dp))
+            ApGlyph(ApGlyphKind.CHEVRON, Modifier.size(18.dp), ink.copy(alpha = .48f))
         }
     }
     Spacer(Modifier.height(9.dp))
@@ -512,16 +551,16 @@ fun TeacherApp(store: TeacherStore) {
 @Composable private fun ClassForm(onBack: () -> Unit, onSave: (String, String, String) -> Unit, initial: Classroom? = null, onDirty: () -> Unit = {}) {
     var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name.orEmpty()) }
     var stage by rememberSaveable(initial?.id) { mutableStateOf(initial?.stage ?: "Ensino Fundamental") }
-    var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: "Matutino") }
+    var shift by rememberSaveable(initial?.id) { mutableStateOf(initial?.shift ?: ClassroomRules.unspecifiedShift) }
     Heading(if (initial == null) "Vamos criar sua turma?" else "Editar turma", if (initial == null) "Você poderá adicionar alunos depois." else "Atualize os dados da turma.", onBack)
     Panel {
         Input("Nome da turma (ex.: 5º Ano A)", name, { if (it != name) { name = it; onDirty() } })
         Text("Etapa de ensino", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(9.dp))
-        Choices(listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio"), stage) { if (it != stage) { stage = it; onDirty() } }
+        Choices(ClassroomRules.stages, stage) { if (it != stage) { stage = it; onDirty() } }
         Text("Turno", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Choices(listOf("Matutino", "Vespertino", "Noturno"), shift) { if (it != shift) { shift = it; onDirty() } }
+        Choices(ClassroomRules.shifts, shift, columns = 2) { if (it != shift) { shift = it; onDirty() } }
         Spacer(Modifier.height(10.dp))
         PrimaryButton(if (initial == null) "Criar turma →" else "Salvar alterações") { onSave(name, stage, shift) }
     }
@@ -593,49 +632,250 @@ fun TeacherApp(store: TeacherStore) {
 }
 
 @Composable private fun ClassesScreen(data: TeacherSnapshot, current: Classroom?, onPick: (Long) -> Unit, onAdd: () -> Unit, onRestore: (Long) -> Unit) {
-    Heading("Suas turmas", "Organize suas classes e alunos")
+    Heading("Suas turmas", "Organize suas turmas e alunos")
+    var search by rememberSaveable { mutableStateOf("") }
     val active = data.classrooms.filterNot { it.archived }
-    if (active.isEmpty()) Panel { Text("Nenhuma turma ativa. Crie uma ou restaure uma arquivada.", color = ink) }
-    active.forEach { classroom ->
-        ActionTile(ApGlyphKind.USERS, classroom.name, "${classroom.stage} • ${data.students.count { it.classroomId == classroom.id }} alunos") { onPick(classroom.id) }
-    }
-    Spacer(Modifier.height(10.dp))
-    if (active.size < 2) PrimaryButton("+ Nova turma") { onAdd() }
-    else Panel { Text("Você atingiu o limite gratuito de 2 turmas ativas. Arquive uma turma antes de criar ou restaurar outra.", color = ink) }
-    Spacer(Modifier.height(9.dp))
-    Text("Até 2 turmas ativas no plano gratuito; alunos ilimitados. Arquivar preserva os registros.", fontSize = 12.sp, color = ink.copy(alpha = .7f))
     val archived = data.classrooms.filter { it.archived }
+    fun matches(classroom: Classroom) = search.isBlank() ||
+        "${classroom.name} ${classroom.stage} ${classroom.shift}".contains(search.trim(), ignoreCase = true)
+    val visibleActive = active.filter(::matches)
+    val visibleArchived = archived.filter(::matches)
+    if (active.size < 2) {
+        ApRaisedButton("Nova turma", onAdd, glyph = ApGlyphKind.PLUS)
+        Spacer(Modifier.height(12.dp))
+    } else {
+        Panel {
+            Text("Você já tem 2 turmas ativas", color = ink, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(4.dp)); Text("Arquive uma turma para criar ou restaurar outra. Seus registros continuam preservados.", color = ink.copy(alpha = .72f))
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+    if (data.classrooms.size >= 5) {
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Buscar turma por nome, etapa ou turno") },
+            singleLine = true,
+            shape = RoundedCornerShape(ApShapeToken.Medium),
+            trailingIcon = if (search.isNotEmpty()) ({
+                TextButton(onClick = { search = "" }) { Text("Limpar") }
+            }) else null,
+        )
+        Spacer(Modifier.height(10.dp))
+    }
+    if (active.isEmpty()) Panel { Text("Nenhuma turma ativa. Crie uma ou restaure uma arquivada.", color = ink) }
+    else if (visibleActive.isEmpty() && search.isNotBlank()) Text("Nenhuma turma ativa corresponde à busca.", color = ink)
+    visibleActive.forEach { classroom ->
+        ActionTile(ApGlyphKind.USERS, classroom.name, "${classroom.stage} • ${classroom.shift} • ${data.students.count { it.classroomId == classroom.id }} alunos") { onPick(classroom.id) }
+    }
     if (archived.isNotEmpty()) {
         Spacer(Modifier.height(20.dp)); Subtitle("Turmas arquivadas")
-        archived.forEach { classroom -> ActionTile(ApGlyphKind.RESTORE, classroom.name, "Restaurar turma e seus registros") { onRestore(classroom.id) } }
+        if (visibleArchived.isEmpty() && search.isNotBlank()) Text("Nenhuma turma arquivada corresponde à busca.", color = ink)
+        visibleArchived.forEach { classroom ->
+            if (active.size < 2) {
+                ActionTile(ApGlyphKind.RESTORE, classroom.name, "Restaurar turma e seus registros") { onRestore(classroom.id) }
+            } else {
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(ApShapeToken.Card), color = Color.White, border = BorderStroke(1.dp, outline)) {
+                    Row(Modifier.padding(ApSpace.Base), verticalAlignment = Alignment.CenterVertically) {
+                        ApIconBadge(ApGlyphKind.RESTORE)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(classroom.name, color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                            Text("Libere uma vaga ativa para restaurar esta turma.", color = ink.copy(alpha = .68f), fontSize = 12.sp)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(9.dp))
+            }
+        }
     }
 }
 
-@Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit, onObservation: (Long) -> Unit) {
-    Heading(classroom.name, "${data.students.count { it.classroomId == classroom.id }} alunos • ${classroom.stage}", { go("classes") })
-    Subtitle("Sua turma")
-    ActionTile(ApGlyphKind.EDIT, "Editar turma", "Nome, etapa e turno") { go("editClass") }
-    ActionTile(ApGlyphKind.USERS, "Alunos", "Adicionar e consultar alunos") { go("addStudent") }
-    ActionTile(ApGlyphKind.CHECK, "Frequência", "Registrar presenças e faltas") { go("attendance") }
-    ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
-    ActionTile(ApGlyphKind.DOCUMENT, "Registros", "Nova observação pedagógica") { go("observation") }
-    ActionTile(ApGlyphKind.DOCUMENT, "Histórico de registros", "Consultar e editar todas as observações") { go("observationHistory") }
-    Spacer(Modifier.height(17.dp)); Subtitle("Alunos")
+@Composable private fun ClassDetail(
+    data: TeacherSnapshot,
+    classroom: Classroom,
+    section: String,
+    onSectionChange: (String) -> Unit,
+    studentSearch: String,
+    onStudentSearchChange: (String) -> Unit,
+    back: () -> Unit,
+    go: (String) -> Unit,
+    onStudent: (Long) -> Unit,
+    onObservation: (Long) -> Unit,
+) {
     val students = data.students.filter { it.classroomId == classroom.id }
-    if (students.isEmpty()) Panel { Text("Esta turma ainda não tem alunos.", color = ink); Spacer(Modifier.height(9.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") } }
-    students.forEach { student -> ActionTile(ApGlyphKind.USERS, student.name, "Consultar e editar cadastro") { onStudent(student.id) } }
-    Spacer(Modifier.height(14.dp)); Subtitle("Registros recentes")
-    data.observations.filter { it.classroomId == classroom.id }.take(5).forEach { note ->
-        Surface(Modifier.fillMaxWidth().clickable { onObservation(note.id) }, shape = RoundedCornerShape(18.dp), color = Color.White, border = BorderStroke(1.dp, outline)) {
-            Column(Modifier.padding(15.dp)) {
-                Text("${note.kind} • ${note.date}", color = blue, fontWeight = FontWeight.ExtraBold)
-                Spacer(Modifier.height(7.dp)); Text(note.body, color = ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(7.dp)); Text("Toque para consultar ou editar", color = ink.copy(alpha = .65f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    val sessions = data.attendanceSessions.filter { it.classroomId == classroom.id }.sortedByDescending { it.date }
+    val observations = data.observations.filter { it.classroomId == classroom.id }.sortedByDescending { it.date }
+    val visibleStudents = if (studentSearch.isBlank()) students else students.filter {
+        it.name.contains(studentSearch.trim(), ignoreCase = true)
+    }
+    Heading(classroom.name, "${classroom.stage} • ${classroom.shift}", back)
+    ClassDetailTabs(section, onSectionChange)
+    Spacer(Modifier.height(16.dp))
+
+    when (section) {
+        "Alunos" -> {
+            Text("${students.size} ${if (students.size == 1) "aluno" else "alunos"}", color = ink.copy(alpha = .72f), fontSize = 14.sp)
+            Spacer(Modifier.height(10.dp))
+            if (students.isEmpty()) {
+                Panel {
+                    Text("Sua lista começa aqui", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(5.dp)); Text("Adicione os alunos agora ou cole uma lista. Você poderá editar os cadastros depois.", color = ink.copy(alpha = .72f))
+                    Spacer(Modifier.height(14.dp)); ApRaisedButton("Adicionar primeiro aluno", { go("addStudent") }, glyph = ApGlyphKind.PLUS)
+                    TextButton(onClick = { go("addStudents") }, modifier = Modifier.fillMaxWidth().heightIn(min = ApSizeToken.MinTouchTarget)) {
+                        Text("Colar uma lista de alunos", color = ApPalette.Action, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    ApRaisedButton("Adicionar aluno", { go("addStudent") }, Modifier.weight(1f), ApGlyphKind.PLUS)
+                    ApRaisedButton("Colar lista", { go("addStudents") }, Modifier.weight(1f), ApGlyphKind.IMPORT, secondary = true)
+                }
+                if (students.size >= 8) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = studentSearch,
+                        onValueChange = onStudentSearchChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Buscar aluno pelo nome") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(ApShapeToken.Medium),
+                        trailingIcon = if (studentSearch.isNotEmpty()) ({
+                            TextButton(onClick = { onStudentSearchChange("") }) { Text("Limpar") }
+                        }) else null,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                when {
+                    visibleStudents.isEmpty() -> Panel { Text("Nenhum aluno corresponde a “${studentSearch.trim()}”. Limpe a busca para ver a lista completa.", color = ink) }
+                    else -> visibleStudents.forEach { student ->
+                        ActionTile(ApGlyphKind.USERS, studentLabel(data.students, student), "Consultar e editar cadastro") { onStudent(student.id) }
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(8.dp))
+
+        "Frequência" -> {
+            Subtitle("Chamada da turma")
+            if (students.isEmpty()) {
+                Panel {
+                    Text("Adicione alunos antes de iniciar a chamada.", color = ink)
+                    Spacer(Modifier.height(12.dp)); ApRaisedButton("Adicionar primeiro aluno", { go("addStudent") }, glyph = ApGlyphKind.PLUS)
+                }
+            } else {
+                ApRaisedButton("Fazer chamada de hoje", { go("attendance") }, glyph = ApGlyphKind.CALENDAR)
+            }
+            Spacer(Modifier.height(10.dp))
+            ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
+            Spacer(Modifier.height(8.dp)); Subtitle("Última chamada")
+            val latest = sessions.firstOrNull()
+            if (latest == null) {
+                Panel { Text("O histórico desta turma aparecerá aqui depois da primeira chamada salva.", color = ink) }
+            } else {
+                val present = latest.members.count { it.status == "P" }
+                val absent = latest.members.count { it.status == "F" }
+                val pending = latest.members.count { it.status == "?" }
+                Panel {
+                    Text(friendlyDay(latest.date), color = ink, fontWeight = FontWeight.ExtraBold)
+                    Spacer(Modifier.height(8.dp)); Text(
+                        "$present ${if (present == 1) "presente" else "presentes"} • " +
+                            "$absent ${if (absent == 1) "falta" else "faltas"} • " +
+                            "$pending ${if (pending == 1) "pendente" else "pendentes"}",
+                        color = ink.copy(alpha = .78f),
+                    )
+                    if (!latest.rosterComplete) {
+                        Spacer(Modifier.height(8.dp)); Text("Registro histórico parcial: a lista completa de alunos não foi preservada nesta chamada.", color = ink.copy(alpha = .72f), fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+
+        "Registros" -> {
+            Subtitle("Acompanhamento pedagógico")
+            ApRaisedButton("Novo registro", { go("observation") }, glyph = ApGlyphKind.DOCUMENT)
+            Spacer(Modifier.height(9.dp))
+            ActionTile(ApGlyphKind.DOCUMENT, "Histórico de registros", "Consultar e editar as observações desta turma") { go("observationHistory") }
+            Spacer(Modifier.height(8.dp)); Subtitle("Mais recentes")
+            if (observations.isEmpty()) {
+                Panel { Text("Os registros desta turma aparecerão aqui depois que você salvar a primeira observação.", color = ink) }
+            } else observations.take(5).forEach { note -> ObservationPreview(note) { onObservation(note.id) } }
+        }
+
+        else -> {
+            if (students.isEmpty()) {
+                Panel {
+                    Text("Prepare sua turma", color = ink, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.height(5.dp)); Text("Cadastre a lista uma vez. Depois, a chamada fica a um toque de distância.", color = ink.copy(alpha = .72f))
+                    Spacer(Modifier.height(14.dp)); ApRaisedButton("Adicionar primeiro aluno", { go("addStudent") }, glyph = ApGlyphKind.PLUS)
+                    TextButton(onClick = { go("addStudents") }, modifier = Modifier.fillMaxWidth().heightIn(min = ApSizeToken.MinTouchTarget)) {
+                        Text("Colar uma lista de alunos", color = ApPalette.Action, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                ApRaisedButton("Fazer chamada de hoje", { go("attendance") }, glyph = ApGlyphKind.CALENDAR)
+                Spacer(Modifier.height(14.dp))
+                Subtitle("Resumo da turma")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ClassMetric("${students.size}", "Alunos", Modifier.weight(1f))
+                    ClassMetric("${sessions.size}", "Chamadas", Modifier.weight(1f))
+                    ClassMetric("${observations.size}", "Registros", Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(17.dp)); Subtitle("Acessos rápidos")
+                ActionTile(ApGlyphKind.CALENDAR, "Planejar aula", "Criar um plano para esta turma") { go("newLesson") }
+                ActionTile(ApGlyphKind.DOCUMENT, "Novo registro", "Adicionar uma observação pedagógica") { go("observation") }
+                if (sessions.isNotEmpty()) ActionTile(ApGlyphKind.CHECK, "Histórico de frequência", "${sessions.size} ${if (sessions.size == 1) "chamada salva" else "chamadas salvas"}") { go("attendanceHistory") }
+            }
+            Spacer(Modifier.height(12.dp)); Subtitle("Gerenciar turma")
+            ActionTile(ApGlyphKind.EDIT, "Editar turma", "Nome, etapa e turno") { go("editClass") }
+            PrimaryButton("Arquivar turma", secondary = true) { go("archiveClass") }
+        }
     }
-    Spacer(Modifier.height(16.dp)); PrimaryButton("Arquivar turma", secondary = true) { go("archiveClass") }
+}
+
+@Composable private fun ClassDetailTabs(selected: String, onSelect: (String) -> Unit) {
+    val sections = listOf("Visão do dia", "Alunos", "Frequência", "Registros")
+    Row(
+        Modifier.fillMaxWidth().selectableGroup().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        sections.forEach { label ->
+            val active = selected == label
+            Surface(
+                modifier = Modifier.heightIn(min = ApSizeToken.MinTouchTarget)
+                    .selectable(selected = active, role = Role.Tab) { onSelect(label) },
+                shape = RoundedCornerShape(ApShapeToken.Pill),
+                color = if (active) ApPalette.Action else Color.White,
+                border = BorderStroke(1.dp, if (active) ApPalette.Action else outline),
+            ) {
+                Box(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
+                    Text(label, color = if (active) Color.White else ink, fontSize = 14.sp,
+                        fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Bold, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun ClassMetric(value: String, label: String, modifier: Modifier = Modifier) {
+    Surface(modifier.heightIn(min = 78.dp), color = Color.White, shape = RoundedCornerShape(ApShapeToken.Medium), border = BorderStroke(1.dp, outline)) {
+        Column(Modifier.padding(horizontal = 11.dp, vertical = 10.dp), verticalArrangement = Arrangement.Center) {
+            Text(value, color = ApPalette.Action, fontSize = 22.sp, lineHeight = 25.sp, fontWeight = FontWeight.Black)
+            Text(label, color = ink.copy(alpha = .76f), fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable private fun ObservationPreview(note: Observation, onClick: () -> Unit) {
+    Surface(Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick), shape = RoundedCornerShape(ApShapeToken.Card), color = Color.White, border = BorderStroke(1.dp, outline)) {
+        Column(Modifier.padding(ApSpace.Base)) {
+            Text("${note.kind} • ${note.date}", color = ApPalette.Action, fontWeight = FontWeight.ExtraBold)
+            Spacer(Modifier.height(7.dp)); Text(note.body, color = ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(7.dp)); Text("Toque para consultar ou editar", color = ink.copy(alpha = .68f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+    Spacer(Modifier.height(8.dp))
 }
 
 @Composable private fun ArchiveClassScreen(classroom: Classroom, back: () -> Unit, archive: () -> Unit) {
@@ -647,7 +887,7 @@ fun TeacherApp(store: TeacherStore) {
     }
 }
 
-@Composable private fun StudentEditForm(student: Student, classroom: Classroom, back: () -> Unit, save: (String) -> Unit, delete: () -> Unit, onDirty: () -> Unit = {}) {
+@Composable private fun StudentEditForm(student: Student, classroom: Classroom, displayName: String = student.name, back: () -> Unit, save: (String) -> Unit, delete: () -> Unit, onDirty: () -> Unit = {}) {
     var name by rememberSaveable(student.id) { mutableStateOf(student.name) }
     var confirming by remember { mutableStateOf(false) }
     Heading("Editar aluno", classroom.name, back)
@@ -657,8 +897,8 @@ fun TeacherApp(store: TeacherStore) {
         Spacer(Modifier.height(14.dp)); PrimaryButton("Excluir aluno", secondary = true) { confirming = true }
     }
     if (confirming) AlertDialog(
-        onDismissRequest = { confirming = false }, title = { Text("Excluir este aluno?") },
-        text = { Text("A exclusão é permanente. As frequências deste aluno também serão apagadas, e observações vinculadas ficarão sem aluno identificado. Confirme apenas se tiver certeza.") },
+        onDismissRequest = { confirming = false }, title = { Text("Excluir $displayName?") },
+        text = { Text("A exclusão do cadastro é permanente. As chamadas já salvas permanecem no histórico com o nome registrado; observações vinculadas também permanecem, sem identificação do aluno.") },
         confirmButton = { TextButton(onClick = { confirming = false; delete() }) { Text("Excluir definitivamente") } },
         dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancelar") } })
 }
@@ -669,14 +909,54 @@ fun TeacherApp(store: TeacherStore) {
     Panel { Input("Nome completo do aluno", name, { if (it != name) { name = it; onDirty() } }); PrimaryButton("Salvar aluno") { save(name) } }
 }
 
+@Composable private fun StudentRosterImportForm(classroom: Classroom, back: () -> Unit, save: (List<String>) -> Unit, onDirty: () -> Unit = {}) {
+    var pastedNames by rememberSaveable(classroom.id) { mutableStateOf("") }
+    val parsed = remember(pastedNames) { runCatching { StudentRosterImport.parse(pastedNames) } }
+    val names = parsed.getOrNull().orEmpty()
+    Heading("Adicionar lista de alunos", classroom.name, back)
+    Panel {
+        Text("Cole somente os nomes, um por linha. Linhas vazias são ignoradas; homônimos continuam como cadastros separados.", color = ink)
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = pastedNames,
+            onValueChange = { if (it != pastedNames) { pastedNames = it; onDirty() } },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Nomes dos alunos") },
+            placeholder = { Text("Ana Silva\nBruno Souza") },
+            minLines = 8,
+            maxLines = 14,
+            shape = RoundedCornerShape(ApShapeToken.Medium),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = blue, unfocusedBorderColor = outline, focusedLabelColor = blue,
+                focusedContainerColor = ApColors.White, unfocusedContainerColor = ApColors.White,
+            ),
+        )
+        Spacer(Modifier.height(8.dp))
+        if (parsed.isSuccess) {
+            Text("${names.size} ${if (names.size == 1) "aluno pronto" else "alunos prontos"} para adicionar", color = ink, fontWeight = FontWeight.Bold)
+        } else if (pastedNames.isNotBlank()) {
+            Text(parsed.exceptionOrNull()?.message.orEmpty(), color = MaterialTheme.colorScheme.error)
+        }
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton(
+            if (names.size == 1) "Adicionar 1 aluno" else "Adicionar ${names.size} alunos",
+            enabled = names.isNotEmpty(),
+        ) { save(names) }
+        Spacer(Modifier.height(9.dp))
+        PrimaryButton("Cancelar", secondary = true) { back() }
+    }
+}
+
 @Composable private fun DaySwitch(day: String, onDay: (String) -> Unit) {
     Panel {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Surface(Modifier.size(42.dp).clickable { onDay(LocalDate.parse(day).minusDays(1).toString()) }, color = pale, shape = RoundedCornerShape(13.dp)) {
+            Surface(Modifier.size(48.dp).clickable(role = Role.Button) { onDay(LocalDate.parse(day).minusDays(1).toString()) }
+                .semantics { contentDescription = "Dia anterior" }, color = pale, shape = RoundedCornerShape(13.dp)) {
                 Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.BACK, Modifier.size(20.dp), blue) }
             }
             Text(friendlyDay(day), color = ink, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, textAlign = TextAlign.Center)
-            Surface(Modifier.size(42.dp).clickable { onDay(LocalDate.parse(day).plusDays(1).toString()) }, color = pale, shape = RoundedCornerShape(13.dp)) {
+            Surface(Modifier.size(48.dp).clickable(role = Role.Button) { onDay(LocalDate.parse(day).plusDays(1).toString()) }
+                .semantics { contentDescription = "Próximo dia" }, color = pale, shape = RoundedCornerShape(13.dp)) {
                 Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.OPEN, Modifier.size(18.dp), blue) }
             }
         }
@@ -688,7 +968,7 @@ fun TeacherApp(store: TeacherStore) {
     val enrolledStudents = data.students.filter { it.classroomId == classroom.id }
     val session = data.attendanceSessions.firstOrNull { it.classroomId == classroom.id && it.date == day }
     val students = session?.members?.map { Student(it.studentId, classroom.id, it.studentName) } ?: enrolledStudents
-    val draft = remember(classroom.id, day, session, data.attendance) {
+    val draft = remember(classroom.id, day, session, data.attendance, students) {
         mutableStateMapOf<Long, String>().apply {
             if (session != null) session.members.forEach { this[it.studentId] = it.status }
             else students.forEach { student -> this[student.id] = "?" }
@@ -707,6 +987,15 @@ fun TeacherApp(store: TeacherStore) {
         }
     }
     Spacer(Modifier.height(16.dp))
+    if (students.isNotEmpty() && students.any { draft[it.id] != "P" }) {
+        TextButton(
+            onClick = {
+                students.forEach { draft[it.id] = "P" }
+                onDirty()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Marcar todos como presentes", color = blue, fontWeight = FontWeight.Bold) }
+    }
     if (session != null && !session.rosterComplete) {
         Panel {
             Text("Esta chamada antiga não guardava a lista completa. Os nomes e as marcações abaixo são os únicos dados históricos preservados.", color = ink)

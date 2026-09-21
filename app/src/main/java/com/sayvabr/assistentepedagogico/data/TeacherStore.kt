@@ -9,6 +9,11 @@ import java.time.LocalTime
 
 /** All records stay in the app's private SQLite database. Android automatic backup is disabled. */
 data class TeacherProfile(val name: String)
+object ClassroomRules {
+    val stages = listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")
+    const val unspecifiedShift = "Não informado"
+    val shifts = listOf("Matutino", "Vespertino", "Noturno", unspecifiedShift)
+}
 data class Classroom(val id: Long, val name: String, val stage: String, val shift: String, val archived: Boolean = false)
 data class Student(val id: Long, val classroomId: Long, val name: String)
 data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String, val archived: Boolean = false,
@@ -146,7 +151,8 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     fun createClass(name: String, stage: String, shift: String): Long {
         require(name.isNotBlank()) { "Informe o nome da turma." }
-        require(stage in listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")) { "Selecione a etapa de ensino." }
+        require(stage in ClassroomRules.stages) { "Selecione a etapa de ensino." }
+        require(shift in ClassroomRules.shifts) { "Selecione o turno da turma." }
         val db = writableDatabase
         db.beginTransaction()
         return try {
@@ -159,6 +165,8 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     fun updateClass(classroomId: Long, name: String, stage: String, shift: String) {
         require(name.trim().isNotEmpty()) { "Informe o nome da turma." }
+        require(stage in ClassroomRules.stages) { "Selecione a etapa de ensino." }
+        require(shift in ClassroomRules.shifts) { "Selecione o turno da turma." }
         val changed = writableDatabase.update("classrooms", values("name" to name.trim(), "stage" to stage, "shift" to shift), "id=? AND archived=0", arrayOf(classroomId.toString()))
         require(changed == 1) { "Turma não encontrada ou arquivada." }
     }
@@ -194,8 +202,28 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun addStudent(classroomId: Long, name: String) {
-        require(name.trim().length >= 2) { "Informe o nome do aluno." }
-        writableDatabase.insertOrThrow("students", null, values("classroom_id" to classroomId, "name" to name.trim()))
+        addStudents(classroomId, listOf(name))
+    }
+
+    /** Inserts a roster as one operation; duplicate names are preserved as separate students. */
+    fun addStudents(classroomId: Long, names: List<String>): Int {
+        val cleaned = names.map { it.trim() }
+        require(cleaned.isNotEmpty()) { "Cole pelo menos um nome de aluno." }
+        require(cleaned.all { it.length >= 2 }) { "Cada nome deve ter pelo menos 2 caracteres. Nenhum aluno foi adicionado." }
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.rawQuery("SELECT archived FROM classrooms WHERE id=?", arrayOf(classroomId.toString())).use { cursor ->
+                require(cursor.moveToFirst()) { "Turma não encontrada." }
+                require(cursor.getInt(0) == 0) { "Restaure a turma antes de adicionar alunos." }
+            }
+            cleaned.forEach { name ->
+                db.insertOrThrow("students", null, values("classroom_id" to classroomId, "name" to name))
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+        return cleaned.size
     }
 
     fun saveLesson(classroomId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {

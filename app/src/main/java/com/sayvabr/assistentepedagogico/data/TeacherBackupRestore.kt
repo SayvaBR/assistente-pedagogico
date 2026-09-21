@@ -76,7 +76,11 @@ object TeacherBackupRestore {
         require(result.files.map { it.required("uri") }.distinct().size == result.files.size) {
             "Há arquivos com endereços repetidos."
         }
-        result.classrooms.forEach { it.required("name"); it.required("stage"); it.required("shift") }
+        result.classrooms.forEach {
+            it.required("name")
+            require(it.required("stage") in ClassroomRules.stages) { "Etapa de ensino inválida no backup." }
+            require(it.required("shift") in ClassroomRules.shifts) { "Turno inválido no backup." }
+        }
         result.students.forEach { require(it.id("classroomId") in classes) { "Aluno sem turma no backup." }; it.required("name") }
         result.lessons.forEach {
             require(it.id("classroomId") in classes) { "Plano sem turma no backup." }
@@ -186,6 +190,7 @@ object TeacherBackupRestore {
                 "day" to it.required("date"), "status" to it.required("status"))) }
             records.attendanceSessions?.let { AttendanceV10.restoreBackup(db, it) }
                 ?: AttendanceV10.captureLegacyAttendance(db)
+            AttendanceV10.advanceStudentIdSequencePastSnapshots(db)
             records.observations.forEach { db.insertOrThrow("observations", null, values(
                 "id" to it.id(), "classroom_id" to it.id("classroomId"), "student_id" to it.optionalId("studentId"),
                 "kind" to it.required("kind"), "body" to it.required("body"), "day" to it.required("date"),

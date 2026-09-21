@@ -46,3 +46,6 @@ A cada PR de UI: captura REAL executando no Android com SHA e cenário; revisar 
 
 ## Governança
 Qualquer mudança de cor, escala, tipografia ou componente começa pelo token e documento e deve migrar o componente compartilhado em vez de duplicar constantes por tela. Revisão do agente `visual-designer`, verificação independente do `quality-guardian` e aprovação final da titular antes de `main`. Ver `docs/AGENT_WORKFLOW.md`.
+
+## Ajuste visual a partir de aparelho real — 21/09/2026
+Títulos compartilhados com peso Bold; onboarding 28/34sp e ilustração compacta; campos de entrada sobre branco. Navegação inferior usa indicador claro atrás do ícone ativo e azul Action. Cartões de navegação usam chevron, ícone de 23dp em suporte de 40dp e texto secundário com entrelinha de 18sp. Glifos temporários usam traço proporcional de 7%; não são Lucide. Mantidos os tokens canônicos e o CTA acessível existente. Alterações exclusivamente de apresentação; validação Android e aceite visual pendentes no novo SHA.

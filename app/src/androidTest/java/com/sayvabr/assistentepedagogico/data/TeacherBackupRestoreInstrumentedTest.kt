@@ -112,6 +112,12 @@ class TeacherBackupRestoreInstrumentedTest {
         assertThrows(IllegalArgumentException::class.java) { s.restoreBackupAfterConfirmation(badReference, true) }
         assertEquals(before, s.read())
 
+        val invalidClassOptions = JSONObject(backup).apply {
+            getJSONArray("classrooms").getJSONObject(0).put("shift", "Integral")
+        }.toString()
+        assertThrows(IllegalArgumentException::class.java) { s.restoreBackupAfterConfirmation(invalidClassOptions, true) }
+        assertEquals(before, s.read())
+
         // Duplicate attendance keys are rejected before restore touches the existing database.
         val badConstraint = JSONObject(backup).apply {
             val entries = getJSONArray("attendance")
@@ -146,5 +152,30 @@ class TeacherBackupRestoreInstrumentedTest {
         restored = s.read()
         assertFalse(restored.attendanceSessions.single().rosterComplete)
         assertEquals("Aluna Fictícia", restored.attendanceSessions.single().members.single().studentName)
+    }
+
+    @Test fun cleanRestoreDoesNotReuseDeletedStudentIdFromHistoricalCall() {
+        val s = requireNotNull(store)
+        val classId = s.createClass("5º Ano B", "Ensino Fundamental", "Matutino")
+        s.addStudent(classId, "Aluna Fictícia")
+        val deletedStudentId = s.read().students.single().id
+        s.saveAttendance(classId, "2026-09-22", mapOf(deletedStudentId to "P"))
+        s.deleteStudent(classId, deletedStudentId)
+        val backup = s.exportBackupPayload()
+
+        s.close()
+        context.deleteDatabase("pedagogico.db")
+        store = TeacherStore(context)
+        val restoredStore = requireNotNull(store)
+        restoredStore.restoreBackupAfterConfirmation(backup, true)
+        restoredStore.addStudent(classId, "Novo Aluno Fictício")
+        val newStudentId = restoredStore.read().students.single().id
+
+        assertTrue("A sequência deve ultrapassar IDs guardados no histórico", newStudentId > deletedStudentId)
+        restoredStore.saveAttendance(classId, "2026-09-22", mapOf(deletedStudentId to "F"))
+        val restored = restoredStore.read()
+        assertEquals("Aluna Fictícia", restored.attendanceSessions.single().members.single().studentName)
+        assertEquals("F", restored.attendanceSessions.single().members.single().status)
+        assertTrue("A chamada histórica não pode marcar o novo aluno", restored.attendance.none { it.studentId == newStudentId })
     }
 }

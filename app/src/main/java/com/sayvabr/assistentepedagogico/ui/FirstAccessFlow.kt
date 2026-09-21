@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.sayvabr.assistentepedagogico.data.ClassroomRules
 import com.sayvabr.assistentepedagogico.data.TeacherStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -146,7 +147,7 @@ fun FirstAccessFlow(store: TeacherStore) {
                                 try {
                                     check(store.read().profile == null) { "Seu perfil já existe. Reabra o aplicativo." }
                                     store.saveProfile(name)
-                                    store.createClass(classroom, stage, "Não informado")
+                                    store.createClass(classroom, stage, ClassroomRules.unspecifiedShift)
                                     db.setTransactionSuccessful()
                                 } finally { db.endTransaction() }
                             } }.onSuccess { prefs.edit().clear().apply(); go("done") }
@@ -191,25 +192,25 @@ fun FirstAccessFlow(store: TeacherStore) {
 }
 
 @Composable private fun EntryTitle(text: String) {
-    Text(text, Modifier.semantics { heading() }, color = ApColors.Navy, fontSize = 32.sp,
-        lineHeight = 38.sp, fontWeight = FontWeight.Black)
+    Text(text, Modifier.semantics { heading() }, color = ApColors.Navy, fontSize = 28.sp,
+        lineHeight = 34.sp, fontWeight = FontWeight.Bold)
 }
 
 @Composable private fun EntryField(label: String, value: String, change: (String) -> Unit) {
     OutlinedTextField(value, change, label = { Text(label) }, singleLine = true,
-        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp))
+        modifier = Modifier.fillMaxWidth().background(ApColors.White, RoundedCornerShape(16.dp)), shape = RoundedCornerShape(16.dp))
 }
 
 @Composable private fun EntryArt(glyph: ApGlyphKind) {
-    Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(140.dp, 128.dp).background(ApPalette.Outline, RoundedCornerShape(36.dp)))
-        Surface(Modifier.offset(y = (-6).dp).size(140.dp, 128.dp), color = ApColors.White,
-            shape = RoundedCornerShape(36.dp), border = BorderStroke(1.dp, ApPalette.Outline)) {
-            Box(contentAlignment = Alignment.Center) { ApGlyph(glyph, Modifier.size(72.dp), ApColors.Pressed) }
+    Box(Modifier.fillMaxWidth().height(112.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(104.dp, 96.dp).background(ApPalette.Outline, RoundedCornerShape(28.dp)))
+        Surface(Modifier.offset(y = (-6).dp).size(104.dp, 96.dp), color = ApColors.White,
+            shape = RoundedCornerShape(28.dp), border = BorderStroke(1.dp, ApPalette.Outline)) {
+            Box(contentAlignment = Alignment.Center) { ApGlyph(glyph, Modifier.size(48.dp), ApColors.Pressed) }
         }
-        Surface(Modifier.align(Alignment.BottomEnd).padding(end = 38.dp, bottom = 6.dp).size(44.dp),
+        Surface(Modifier.align(Alignment.BottomEnd).padding(end = 64.dp, bottom = 4.dp).size(32.dp),
             color = ApColors.Primary, shape = RoundedCornerShape(14.dp)) {
-            Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.CHECK, Modifier.size(25.dp), ApColors.Navy) }
+            Box(contentAlignment = Alignment.Center) { ApGlyph(ApGlyphKind.CHECK, Modifier.size(18.dp), ApColors.Navy) }
         }
     }
 }

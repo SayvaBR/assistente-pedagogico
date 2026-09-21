@@ -7,6 +7,11 @@ import androidx.compose.ui.unit.dp
 object ApPalette {
     val Primary = Color(0xFF1CB0F6)
     val Pressed = Color(0xFF1899D6)
+    val ActionGradientTop = Color(0xFF0874D1)
+    val Action = Color(0xFF0063D9)
+    val ActionPressed = Color(0xFF0054B8)
+    val DisabledSurface = Color(0xFFDBE7F0)
+    val DisabledText = Color(0xFF526A80)
     val Navy = Color(0xFF102A56)
     val Sky = Color(0xFFDDF4FF)
     val White = Color(0xFFFFFFFF)
