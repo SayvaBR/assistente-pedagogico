@@ -214,7 +214,10 @@ fun TeacherApp(store: TeacherStore) {
                         onDirty = { formDirty = true })
                     "archiveClass" -> if (currentClass != null) ArchiveClassScreen(currentClass,
                         back = { back() }, archive = { commit("classes") { store.setClassArchived(currentClass.id, true) } })
-                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, { requestNavigate(it) },
+                    "classDetail" -> if (currentClass != null) ClassDetail(snapshot, currentClass, {
+                        if (it == "attendance") selectedDay = today()
+                        requestNavigate(it)
+                    },
                         onStudent = { selectedStudent = it; requestNavigate("editStudent") },
                         onObservation = { selectedObservation = it; requestNavigate("editObservation") })
                     "editStudent" -> if (currentClass != null) snapshot.students.firstOrNull {
@@ -613,17 +616,18 @@ fun TeacherApp(store: TeacherStore) {
 
 @Composable private fun ClassDetail(data: TeacherSnapshot, classroom: Classroom, go: (String) -> Unit, onStudent: (Long) -> Unit, onObservation: (Long) -> Unit) {
     Heading(classroom.name, "${data.students.count { it.classroomId == classroom.id }} alunos • ${classroom.stage}", { go("classes") })
-    Subtitle("Sua turma")
-    ActionTile(ApGlyphKind.EDIT, "Editar turma", "Nome, etapa e turno") { go("editClass") }
-    ActionTile(ApGlyphKind.USERS, "Alunos", "Adicionar e consultar alunos") { go("addStudent") }
-    ActionTile(ApGlyphKind.CHECK, "Frequência", "Registrar presenças e faltas") { go("attendance") }
+    PrimaryButton("Fazer chamada de hoje") { go("attendance") }
+    Spacer(Modifier.height(18.dp)); Subtitle("Acompanhar")
     ActionTile(ApGlyphKind.CALENDAR, "Histórico de frequência", "Consultar e corrigir chamadas anteriores") { go("attendanceHistory") }
     ActionTile(ApGlyphKind.DOCUMENT, "Registros", "Nova observação pedagógica") { go("observation") }
     ActionTile(ApGlyphKind.DOCUMENT, "Histórico de registros", "Consultar e editar todas as observações") { go("observationHistory") }
     Spacer(Modifier.height(17.dp)); Subtitle("Alunos")
+    ActionTile(ApGlyphKind.PLUS, "Adicionar aluno", "Incluir um aluno nesta turma") { go("addStudent") }
     val students = data.students.filter { it.classroomId == classroom.id }
     if (students.isEmpty()) Panel { Text("Esta turma ainda não tem alunos.", color = ink); Spacer(Modifier.height(9.dp)); PrimaryButton("Adicionar primeiro aluno") { go("addStudent") } }
     students.forEach { student -> ActionTile(ApGlyphKind.USERS, student.name, "Consultar e editar cadastro") { onStudent(student.id) } }
+    Spacer(Modifier.height(17.dp)); Subtitle("Gerenciar turma")
+    ActionTile(ApGlyphKind.EDIT, "Editar turma", "Nome, etapa e turno") { go("editClass") }
     Spacer(Modifier.height(14.dp)); Subtitle("Registros recentes")
     data.observations.filter { it.classroomId == classroom.id }.take(5).forEach { note ->
         Surface(Modifier.fillMaxWidth().clickable { onObservation(note.id) }, shape = RoundedCornerShape(18.dp), color = Color.White, border = BorderStroke(1.dp, outline)) {
