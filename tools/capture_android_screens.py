@@ -129,11 +129,27 @@ def wait_for_text(anchor, timeout=12):
     raise RuntimeError(f'Destination marker {anchor!r} never appeared; actual visible texts: {visible[:36]!r}')
 
 
-def write_field(label, value):
+def write_field(label, value, screen_anchor, recover=None):
     tap_text(label)
     adb('shell', 'input', 'text', value)
+    time.sleep(.4)
+    root, _ = hierarchy()
+    visible = [node.get('text', '') for node in root.iter('node') if node.get('text', '')]
+    if not any(value.casefold() in text.casefold() for text in visible):
+        raise RuntimeError(f"Text entry into {label!r} could not be verified; visible labels: {visible[:40]!r}")
     adb('shell', 'input', 'keyevent', '4')
-    time.sleep(1)
+    time.sleep(.5)
+    root, _ = hierarchy()
+    if visible_anchor(root, 'Descartar alterações?'):
+        tap_text('Continuar editando', exact=True)
+        wait_for_text(screen_anchor)
+        return
+    if visible_anchor(root, screen_anchor):
+        return
+    if recover is None:
+        raise RuntimeError(f"The {screen_anchor!r} screen was left after entering {label!r}")
+    recover(root)
+    wait_for_text(screen_anchor)
 
 
 try:
@@ -142,14 +158,21 @@ try:
     tap_text('Preparar meu espaço', exact=True)
     wait_for_text('Como podemos')
     screenshot('01-perfil')
-    write_field('Seu nome', 'ProfessoraTeste')
+    write_field('Seu nome', 'ProfessoraTeste', 'Como podemos',
+                lambda root: tap_text('Preparar meu espaço', exact=True))
     tap_text('Continuar', exact=True)
     wait_for_text('Em qual etapa')
     tap_text('Ensino Fundamental', exact=True)
     tap_text('Continuar', exact=True)
     wait_for_text('Sua primeira turma')
     screenshot('02-primeira-turma')
-    write_field('Nome da turma', 'TurmaTeste')
+    def resume_class_step(root):
+        if visible_anchor(root, 'Em qual etapa'):
+            tap_text('Continuar', exact=True)
+        else:
+            raise RuntimeError('Cannot return to the first-class step after entering its name')
+
+    write_field('Nome da turma', 'TurmaTeste', 'Sua primeira turma', resume_class_step)
     tap_text('Criar meu espaço', exact=True)
     wait_for_text('Sua turma foi salva')
     screenshot('03-turma-criada')
@@ -161,10 +184,10 @@ try:
     tap_text('TurmaTeste', exact=True)
     wait_for_text('Fazer chamada de hoje')
     screenshot('05-detalhe-turma-vazia')
-    tap_text('Adicionar aluno', exact=True)
+    tap_text('Adicionar primeiro aluno', exact=True)
     wait_for_text('Nome completo do aluno')
     screenshot('06-adicionar-aluno')
-    write_field('Nome completo do aluno', 'EstudanteTeste')
+    write_field('Nome completo do aluno', 'EstudanteTeste', 'Nome completo do aluno')
     tap_text('Salvar aluno', exact=True)
     wait_for_text('EstudanteTeste')
     screenshot('07-turma-com-aluno')

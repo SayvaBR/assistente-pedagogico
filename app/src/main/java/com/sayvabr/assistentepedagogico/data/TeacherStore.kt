@@ -202,8 +202,28 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
     }
 
     fun addStudent(classroomId: Long, name: String) {
-        require(name.trim().length >= 2) { "Informe o nome do aluno." }
-        writableDatabase.insertOrThrow("students", null, values("classroom_id" to classroomId, "name" to name.trim()))
+        addStudents(classroomId, listOf(name))
+    }
+
+    /** Inserts a roster as one operation; duplicate names are preserved as separate students. */
+    fun addStudents(classroomId: Long, names: List<String>): Int {
+        val cleaned = names.map { it.trim() }
+        require(cleaned.isNotEmpty()) { "Cole pelo menos um nome de aluno." }
+        require(cleaned.all { it.length >= 2 }) { "Cada nome deve ter pelo menos 2 caracteres. Nenhum aluno foi adicionado." }
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.rawQuery("SELECT archived FROM classrooms WHERE id=?", arrayOf(classroomId.toString())).use { cursor ->
+                require(cursor.moveToFirst()) { "Turma não encontrada." }
+                require(cursor.getInt(0) == 0) { "Restaure a turma antes de adicionar alunos." }
+            }
+            cleaned.forEach { name ->
+                db.insertOrThrow("students", null, values("classroom_id" to classroomId, "name" to name))
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+        return cleaned.size
     }
 
     fun saveLesson(classroomId: Long, title: String, subject: String, date: String, time: String, objective: String, content: String, method: String) {

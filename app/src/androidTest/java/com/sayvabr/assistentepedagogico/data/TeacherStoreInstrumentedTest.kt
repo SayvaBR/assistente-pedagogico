@@ -127,6 +127,24 @@ class TeacherStoreInstrumentedTest {
         assertEquals("Noturno", updated.shift)
     }
 
+    @Test fun bulkStudentInsertPreservesHomonymsAndRejectsInvalidOrArchivedRosterAtomically() {
+        val first = db()
+        val classroomId = first.createClass("Turma da lista", "Ensino Fundamental", "Matutino")
+        first.addStudent(classroomId, "Aluna existente")
+
+        rejects { first.addStudents(classroomId, listOf("Nova aluna", "X", "Outro aluno")) }
+        assertEquals(listOf("Aluna existente"), reopen().read().students.map { it.name })
+
+        val inserted = db().addStudents(classroomId, listOf(" Ana Silva ", "Bruno Souza", "Ana Silva"))
+        assertEquals(3, inserted)
+        val saved = reopen().read()
+        assertEquals(listOf("Aluna existente", "Ana Silva", "Ana Silva", "Bruno Souza"), saved.students.map { it.name })
+
+        db().setClassArchived(classroomId, true)
+        rejects { db().addStudents(classroomId, listOf("Não adicionar")) }
+        assertEquals(saved.students, reopen().read().students)
+    }
+
     @Test fun studentDeletionKeepsHistoricalCallSnapshotAndUnlinksObservation() {
         val first = db()
         val classroomId = first.createClass("4º A", "Ensino Fundamental", "Matutino")

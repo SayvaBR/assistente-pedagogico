@@ -88,4 +88,58 @@ class ClassFlowInstrumentedTest {
         compose.onNodeWithContentDescription("Voltar").performClick()
         compose.onNodeWithText("Suas turmas").assertExists()
     }
+
+    @Test fun pastedRosterAddsAllNamesIncludingHomonymsAndReturnsToClassDetail() {
+        val database = requireNotNull(store)
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+
+        compose.onNodeWithText("Colar lista").performScrollTo().performClick()
+        compose.onNodeWithText("Nomes dos alunos").performTextInput("Ana Silva\n\nBruno Souza\nAna Silva")
+        compose.onNodeWithText("Adicionar 3 alunos").performScrollTo().performClick()
+
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("Ana Silva").fetchSemanticsNodes().isNotEmpty()
+        }
+        val saved = database.read()
+        assertEquals(4, saved.students.size)
+        assertEquals(2, saved.students.count { it.name == "Ana Silva" })
+        assertEquals(1, saved.students.count { it.name == "Bruno Souza" })
+        compose.onNodeWithText("Fazer chamada de hoje").assertExists()
+    }
+
+    @Test fun largeRosterCanBeSearchedByNameWithoutChangingRecords() {
+        val database = requireNotNull(store)
+        val classroomId = database.read().classrooms.single().id
+        (2..9).forEach { database.addStudent(classroomId, "Estudante $it") }
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Turma sintética").performScrollTo().performClick()
+
+        compose.onNodeWithText("Buscar aluno pelo nome").performScrollTo().performTextInput("Estudante 9")
+        compose.onNodeWithText("Estudante 9").assertExists()
+        compose.onNodeWithText("Estudante 2").assertDoesNotExist()
+        assertEquals(9, database.read().students.size)
+    }
+
+    @Test fun archivedClassesCanBeSearchedAndRestoredFromTheFilteredList() {
+        val database = requireNotNull(store)
+        var previousClass = database.read().classrooms.single().id
+        repeat(4) { index ->
+            database.setClassArchived(previousClass, true)
+            previousClass = database.createClass("Turma arquivada ${index + 1}", "Ensino Fundamental", "Matutino")
+            database.setClassArchived(previousClass, true)
+        }
+        openApp()
+        compose.onAllNodesWithText("Turmas").onLast().performClick()
+        compose.onNodeWithText("Buscar turma por nome, etapa ou turno").performTextInput("Turma arquivada 3")
+        compose.onNodeWithText("Turma arquivada 3").performScrollTo().performClick()
+
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("Turma arquivada 3").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(false, database.read().classrooms.single { it.name == "Turma arquivada 3" }.archived)
+        compose.onNodeWithText("Turma arquivada 2").assertDoesNotExist()
+    }
 }
