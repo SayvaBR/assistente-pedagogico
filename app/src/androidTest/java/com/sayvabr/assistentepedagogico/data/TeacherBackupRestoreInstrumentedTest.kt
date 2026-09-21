@@ -112,6 +112,12 @@ class TeacherBackupRestoreInstrumentedTest {
         assertThrows(IllegalArgumentException::class.java) { s.restoreBackupAfterConfirmation(badReference, true) }
         assertEquals(before, s.read())
 
+        val invalidClassOptions = JSONObject(backup).apply {
+            getJSONArray("classrooms").getJSONObject(0).put("shift", "Integral")
+        }.toString()
+        assertThrows(IllegalArgumentException::class.java) { s.restoreBackupAfterConfirmation(invalidClassOptions, true) }
+        assertEquals(before, s.read())
+
         // Duplicate attendance keys are rejected before restore touches the existing database.
         val badConstraint = JSONObject(backup).apply {
             val entries = getJSONArray("attendance")

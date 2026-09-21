@@ -76,7 +76,11 @@ object TeacherBackupRestore {
         require(result.files.map { it.required("uri") }.distinct().size == result.files.size) {
             "Há arquivos com endereços repetidos."
         }
-        result.classrooms.forEach { it.required("name"); it.required("stage"); it.required("shift") }
+        result.classrooms.forEach {
+            it.required("name")
+            require(it.required("stage") in ClassroomRules.stages) { "Etapa de ensino inválida no backup." }
+            require(it.required("shift") in ClassroomRules.shifts) { "Turno inválido no backup." }
+        }
         result.students.forEach { require(it.id("classroomId") in classes) { "Aluno sem turma no backup." }; it.required("name") }
         result.lessons.forEach {
             require(it.id("classroomId") in classes) { "Plano sem turma no backup." }

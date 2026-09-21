@@ -533,10 +533,10 @@ fun TeacherApp(store: TeacherStore) {
         Input("Nome da turma (ex.: 5º Ano A)", name, { if (it != name) { name = it; onDirty() } })
         Text("Etapa de ensino", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(9.dp))
-        Choices(listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio"), stage) { if (it != stage) { stage = it; onDirty() } }
+        Choices(ClassroomRules.stages, stage) { if (it != stage) { stage = it; onDirty() } }
         Text("Turno", color = ink, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Choices(listOf("Matutino", "Vespertino", "Noturno"), shift) { if (it != shift) { shift = it; onDirty() } }
+        Choices(ClassroomRules.shifts, shift) { if (it != shift) { shift = it; onDirty() } }
         Spacer(Modifier.height(10.dp))
         PrimaryButton(if (initial == null) "Criar turma →" else "Salvar alterações") { onSave(name, stage, shift) }
     }

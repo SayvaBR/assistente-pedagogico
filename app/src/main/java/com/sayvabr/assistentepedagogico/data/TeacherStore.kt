@@ -9,6 +9,10 @@ import java.time.LocalTime
 
 /** All records stay in the app's private SQLite database. Android automatic backup is disabled. */
 data class TeacherProfile(val name: String)
+object ClassroomRules {
+    val stages = listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")
+    val shifts = listOf("Matutino", "Vespertino", "Noturno")
+}
 data class Classroom(val id: Long, val name: String, val stage: String, val shift: String, val archived: Boolean = false)
 data class Student(val id: Long, val classroomId: Long, val name: String)
 data class Lesson(val id: Long, val classroomId: Long, val title: String, val subject: String, val date: String, val time: String, val objective: String, val content: String, val method: String, val archived: Boolean = false,
@@ -146,7 +150,8 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     fun createClass(name: String, stage: String, shift: String): Long {
         require(name.isNotBlank()) { "Informe o nome da turma." }
-        require(stage in listOf("Educação Infantil", "Ensino Fundamental", "Ensino Médio")) { "Selecione a etapa de ensino." }
+        require(stage in ClassroomRules.stages) { "Selecione a etapa de ensino." }
+        require(shift in ClassroomRules.shifts) { "Selecione o turno da turma." }
         val db = writableDatabase
         db.beginTransaction()
         return try {
@@ -159,6 +164,8 @@ class TeacherStore(context: Context) : SQLiteOpenHelper(context.applicationConte
 
     fun updateClass(classroomId: Long, name: String, stage: String, shift: String) {
         require(name.trim().isNotEmpty()) { "Informe o nome da turma." }
+        require(stage in ClassroomRules.stages) { "Selecione a etapa de ensino." }
+        require(shift in ClassroomRules.shifts) { "Selecione o turno da turma." }
         val changed = writableDatabase.update("classrooms", values("name" to name.trim(), "stage" to stage, "shift" to shift), "id=? AND archived=0", arrayOf(classroomId.toString()))
         require(changed == 1) { "Turma não encontrada ou arquivada." }
     }
